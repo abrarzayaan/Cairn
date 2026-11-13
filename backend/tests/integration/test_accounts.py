@@ -174,3 +174,45 @@ def test_settings_bio_update_and_limits(client):
     long_bio = "x" * 281
     with pytest.raises(ValidationError):
         update_user_bio(user, long_bio)
+
+
+@pytest.mark.django_db
+def test_auth_api_me_anonymous(api_client):
+    """Anonymous request to /api/v1/auth/me returns unauthenticated status."""
+    res = api_client.get("/api/v1/auth/me")
+    assert res.status_code == 200
+    data = res.json()
+    assert not data["authenticated"]
+    assert data["user"] is None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_auth_api_flow_authenticated(api_client, client):
+    """Authenticated user can query /me and update bio through the API."""
+    user = User.objects.create_user(username="charlie", github_id=5001)
+    client.force_login(user)
+    session_cookie = client.cookies["sessionid"].value
+
+    from django.db import connection
+
+    connection.close()
+
+    # GET /me with session cookie
+    api_client.cookies.set("sessionid", session_cookie)
+    me_res = api_client.get("/api/v1/auth/me")
+    assert me_res.status_code == 200
+    assert me_res.json()["authenticated"] is True
+    assert me_res.json()["user"]["username"] == "charlie"
+
+    # POST /api/v1/auth/bio
+    bio_res = api_client.post("/api/v1/auth/bio", json={"bio": "Rust and Python enthusiast"})
+    assert bio_res.status_code == 200
+    assert bio_res.json()["bio"] == "Rust and Python enthusiast"
+
+    user.refresh_from_db()
+    assert user.bio == "Rust and Python enthusiast"
+
+    # POST /api/v1/auth/logout
+    logout_res = api_client.post("/api/v1/auth/logout")
+    assert logout_res.status_code == 200
+    assert logout_res.json()["ok"] is True

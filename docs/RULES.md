@@ -20,22 +20,20 @@ Read first: PRD.md (what), ARCHITECTURE.md (how), DESIGN.md (look), SECURITY_CHE
 
 | Area | Use | Do not use |
 |------|-----|------------|
-| Language | Python 3.12+ | Older Python |
-| Web framework | Django (current stable/LTS, pinned) | Flask, other frameworks for pages |
-| API | FastAPI + Pydantic v2 | Django REST Framework, GraphQL |
-| ORM | Django ORM | SQLAlchemy, raw ORM mixing |
+| Language | Python 3.12+ (Backend), TypeScript / Node.js 20+ (Frontend) | Older Python / untyped JS |
+| Backend API | FastAPI + Pydantic v2 (mounted in ASGI) | Django REST Framework, GraphQL |
+| Backend Core / ORM | Django (ORM, Admin, Migrations, Auth models) | Flask, SQLAlchemy |
+| Frontend | Next.js (App Router, React, TypeScript in `frontend/`) | Plain legacy SSR templates |
 | Database | PostgreSQL 16 | SQLite in prod, MongoDB |
-| Auth | django-allauth (GitHub only) | Custom password auth for users, JWT in localStorage |
-| Markdown | markdown-it-py + nh3 | `markdown2` with raw HTML, unsanitized output |
-| Templates | Django templates | Jinja mixed in, React/Vue/Next for pages |
-| CSS | Handwritten CSS with custom properties | Tailwind, Bootstrap, UI kits, CSS-in-JS |
-| JS | Vanilla ES modules; CodeMirror 6 via esbuild | jQuery, React, Alpine, htmx (decide later if needed) |
-| Fonts | Self-hosted woff2 | Google Fonts, CDNs |
-| Icons | Tiny inline SVG, few | Icon fonts, emoji icons, icon libraries |
+| Auth | GitHub OAuth (session-based) | Custom password auth for users, JWT in localStorage |
+| Markdown | markdown-it-py + nh3 (backend) | `markdown2` with raw HTML, unsanitized output |
+| CSS & UI | Tailwind CSS, modern accessible UI components | Bootstrap, jQuery, bloated kits |
+| Editor | CodeMirror 6 | WYSIWYG rich text editors |
+| Icons | Lucide icons / inline SVG | Emoji icons, heavy icon fonts |
 | Search | Postgres FTS + pg_trgm | Elasticsearch/Meilisearch in V1 |
-| Tests | pytest, pytest-django, Playwright (smoke) | unittest-only suites |
-| Lint/format | ruff (lint + format) | Multiple competing formatters |
-| Deploy | Docker, Caddy, gunicorn + uvicorn workers | Serverless for the main app |
+| Tests | pytest, pytest-django, Vitest / Playwright | unittest-only suites |
+| Lint/format | ruff (backend), ESLint + Prettier (frontend) | Multiple competing formatters |
+| Deploy | Docker, Caddy, gunicorn + uvicorn workers, Next.js | Serverless for the main app |
 
 ## 3. Architecture rules
 

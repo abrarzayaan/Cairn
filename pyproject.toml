@@ -52,6 +52,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "backend/config/settings/*.py" = ["F403", "F405"]
 "backend/config/asgi.py" = ["E402"]
+"backend/api/**/*.py" = ["B008"]
 "**/migrations/*.py" = ["E501"]
 
 [tool.ruff.lint.isort]

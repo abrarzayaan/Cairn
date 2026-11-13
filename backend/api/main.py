@@ -3,6 +3,8 @@ from django.db import connection
 from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
 
+from api.routers import users
+
 api_app = FastAPI(
     title="Devbook API",
     version="1.0.0",
@@ -10,6 +12,9 @@ api_app = FastAPI(
     redoc_url=None,
     openapi_url="/api/openapi.json" if getattr(settings, "ENABLE_API_DOCS", False) else None,
 )
+
+# Include routers
+api_app.include_router(users.router, prefix="/api/v1")
 
 
 @api_app.get("/api/v1/health")

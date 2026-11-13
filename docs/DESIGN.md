@@ -2,7 +2,7 @@
 
 The goal of this design: a developer opens it and thinks "someone who writes code built this", not "a template generated this". Calm, dense, readable, keyboard-first. Closer to a good documentation site or a well-made terminal tool than to a SaaS landing page.
 
-Implementation: **handwritten CSS with custom properties. No Tailwind, no Bootstrap, no component library.** See RULES.md.
+Implementation: **Next.js (React, TypeScript) with Tailwind CSS, design tokens, Lucide icons, and accessible components.** All frontend code lives in `frontend/`. See RULES.md.
 
 ---
 

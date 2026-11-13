@@ -1,6 +1,6 @@
 # ARCHITECTURE: Devbook
 
-Stack: **Django** (web, ORM, admin, auth) + **FastAPI** (JSON API) + **PostgreSQL**. One codebase, one deployable service.
+Stack: **Next.js** (Frontend) + **FastAPI** (JSON API) + **Django** (ORM, Admin, Auth models) + **PostgreSQL**.
 
 ---
 
@@ -8,15 +8,15 @@ Stack: **Django** (web, ORM, admin, auth) + **FastAPI** (JSON API) + **PostgreSQ
 
 | # | Decision | Reason |
 |---|----------|--------|
-| D1 | Django owns models, migrations, admin, sessions, HTML pages | Admin panel comes free; mature ORM and migrations |
-| D2 | FastAPI owns the JSON API under `/api/v1` | Fast, typed schemas (Pydantic), good for editor, search, previews |
-| D3 | FastAPI is **mounted inside** the Django ASGI app, same process | One deploy, shared auth cookie, no CORS |
-| D4 | FastAPI uses the **Django ORM** (no second ORM) | One source of truth for the schema |
-| D5 | Pages are **server-rendered** with Django templates | SEO for public notes, no SPA complexity, fast first paint |
-| D6 | Small vanilla JS modules for interactions; CodeMirror 6 bundled with esbuild | Keeps the frontend light and hand-built |
+| D1 | Django owns models, migrations, admin panel, auth identity | Admin panel comes free; mature ORM and migrations |
+| D2 | FastAPI owns the JSON API under `/api/v1` | Fast, typed schemas (Pydantic), powers Next.js editor, search, notes, previews |
+| D3 | FastAPI is **mounted inside** the Django ASGI app, same backend process | One backend deployment, shared auth session cookie, zero CORS |
+| D4 | FastAPI uses the **Django ORM** (no second ORM) | One source of truth for the database schema |
+| D5 | Frontend is a modern **Next.js** App Router in `frontend/` | Next-level UI, SSR/RSC for SEO, client interactivity, modern component ecosystem |
+| D6 | Modern styling with **Tailwind CSS** + design tokens + Lucide icons | Premium developer aesthetic, high performance, customizable |
 | D7 | PostgreSQL full-text search + `pg_trgm` | No extra search server in V1 |
-| D8 | Business logic in **service modules**, called by both Django views and FastAPI routers | No duplicated rules, easy to test |
-| D9 | Session cookie auth (Django sessions) for both Django and FastAPI | One auth system |
+| D8 | Business logic in **service modules**, called by FastAPI routers and Django views | No duplicated rules, easy to test |
+| D9 | Session cookie auth (Django sessions) shared with Next.js | Unified, secure, HTTP-only authentication |
 | D10 | GitHub OAuth only; GitHub numeric ID is the identity key | Verified developers, no passwords |
 
 ## 2. System diagram
@@ -88,69 +88,34 @@ devbook/
 │   │   ├── settings/
 │   │   │   ├── base.py
 │   │   │   ├── dev.py
-│   │   │   └── prod.py
+│   │   │   ├── prod.py
+│   │   │   └── test.py
 │   │   ├── urls.py
 │   │   ├── asgi.py              # mounts FastAPI at /api
-│   │   └── wsgi.py              # not used in prod, kept for tools
+│   │   └── wsgi.py
 │   ├── apps/
-│   │   ├── accounts/
-│   │   │   ├── models.py        # User
-│   │   │   ├── admin.py
-│   │   │   ├── adapters.py      # allauth hooks
-│   │   │   ├── views.py         # settings, export, delete
-│   │   │   └── services.py
-│   │   ├── notes/
-│   │   │   ├── models.py        # Note, Tag, NoteLink, NoteRevision, SlugHistory
-│   │   │   ├── admin.py
-│   │   │   ├── views.py         # HTML pages
-│   │   │   ├── urls.py
-│   │   │   ├── services/
-│   │   │   │   ├── notes.py     # create/update/delete/get_visible
-│   │   │   │   ├── links.py     # parse, resolve, backlinks
-│   │   │   │   ├── paths.py     # reading path
-│   │   │   │   ├── search.py
-│   │   │   │   └── export.py
-│   │   │   ├── markdown/
-│   │   │   │   ├── renderer.py  # markdown-it-py + plugins
-│   │   │   │   ├── wikilinks.py # [[...]] rule
-│   │   │   │   └── sanitize.py  # nh3 allow-list
-│   │   │   └── templatetags/
-│   │   ├── moderation/
-│   │   │   ├── models.py        # Report
-│   │   │   ├── admin.py
-│   │   │   └── services.py
-│   │   └── core/                # home, sitemap, robots, error views, middleware
-│   ├── api/                     # FastAPI
-│   │   ├── main.py              # FastAPI() app, router includes, exception handlers
-│   │   ├── deps.py              # current_user, csrf, rate limit
-│   │   ├── routers/
-│   │   │   ├── notes.py
-│   │   │   ├── search.py
-│   │   │   ├── users.py
-│   │   │   └── reports.py
-│   │   └── schemas/             # Pydantic models
-│   ├── templates/
-│   │   ├── base.html
-│   │   ├── home.html
-│   │   ├── notes/ (view, edit, path, tag, search)
-│   │   ├── accounts/ (profile, settings)
-│   │   └── errors/ (404, 500)
-│   ├── static/
-│   │   ├── css/ (tokens.css, base.css, layout.css, note.css, editor.css, ...)
-│   │   ├── js/  (palette.js, hover-preview.js, editor-boot.js, ...)
-│   │   └── fonts/
-│   └── tests/
-│       ├── unit/
-│       ├── integration/
-│       └── security/            # visibility / leak tests
-├── frontend/                    # only the editor bundle build
+│   │   ├── accounts/            # User model, admin, adapters, services
+│   │   ├── notes/               # Note, Tag, NoteLink, NoteRevision, SlugHistory
+│   │   ├── moderation/          # Report model, admin, services
+│   │   └── core/
+│   ├── api/                     # FastAPI (/api/v1)
+│   │   ├── main.py
+│   │   ├── deps.py              # auth, csrf, rate limiting
+│   │   ├── routers/             # notes, search, users, reports, auth
+│   │   └── schemas/             # Pydantic v2 schemas
+│   └── tests/                   # unit, integration, security
+├── frontend/                    # Next.js App Router (TypeScript, Tailwind, Lucide)
 │   ├── package.json
-│   └── src/editor.js            # CodeMirror 6, esbuild → backend/static/js/editor.bundle.js
+│   ├── tsconfig.json
+│   ├── tailwind.config.ts
+│   ├── app/                     # Next.js routes (home, login, settings, note view, editor, search, path)
+│   ├── components/              # UI components, CodeMirror editor, note layout, search palette
+│   └── lib/                     # API client, types, auth utilities
 ├── docker/
 │   ├── Dockerfile
 │   ├── docker-compose.yml
 │   └── Caddyfile
-├── docs/                        # these .md files
+├── docs/                        # Specifications and checklists
 ├── .env.example
 ├── pyproject.toml
 └── README.md
