@@ -265,7 +265,9 @@ def test_api_backlinks_preview_and_render_rate_limit(api_client, client, alice, 
     )
     assert render_res.status_code == 200
     assert "<h1>Preview</h1>" in render_res.json()["html"]
-    assert render_res.json()["links"] == [{"target_ref": "Scope", "link_type": "prereq"}]
+    assert render_res.json()["links"] == [
+        {"target_ref": "Scope", "link_type": "prereq", "status": "missing"}
+    ]
 
     # Rate limit: 30/minute/user -> 31st request returns 429
     for _ in range(29):

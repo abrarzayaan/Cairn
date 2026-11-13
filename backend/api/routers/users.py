@@ -1,4 +1,5 @@
 from django.contrib.sessions.backends.db import SessionStore
+from django.middleware.csrf import _get_new_csrf_string, _mask_cipher_secret
 from fastapi import APIRouter, Cookie, Depends, Response
 
 from api.deps import get_current_user, require_user
@@ -10,7 +11,20 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.get("/me", response_model=AuthStatus)
-def get_me(user: User | None = Depends(get_current_user)):
+def get_me(
+    response: Response,
+    user: User | None = Depends(get_current_user),
+    csrftoken: str | None = Cookie(None),
+):
+    if not csrftoken:
+        token = _mask_cipher_secret(_get_new_csrf_string())
+        response.set_cookie(
+            "csrftoken",
+            token,
+            httponly=False,
+            samesite="lax",
+            path="/",
+        )
     if not user:
         return AuthStatus(authenticated=False, user=None)
     return AuthStatus(

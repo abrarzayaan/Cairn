@@ -9,12 +9,15 @@ from api.schemas.notes import (
     NoteListItem,
     NoteOut,
     NotePreviewOut,
+    NoteRevisionDetail,
+    NoteRevisionItem,
     NoteUpdateIn,
     PathNodeOut,
     ReadingPathOut,
+    RenderLinkOut,
 )
 from apps.accounts.models import User
-from apps.notes.models import Note, NoteLink
+from apps.notes.models import Note, NoteLink, NoteRevision
 from apps.notes.services.links import get_backlinks, resolve_wikilinks_html
 from apps.notes.services.notes import (
     create_note,
@@ -28,7 +31,28 @@ from apps.notes.services.paths import build_reading_path, get_direct_prerequisit
 router = APIRouter(prefix="/notes", tags=["notes"])
 
 
-def _serialize_note(note: Note) -> NoteOut:
+def _serialize_note(note: Note, include_editor_meta: bool = False) -> NoteOut:
+    links_out: list[RenderLinkOut] = []
+    cycle_warnings: list[str] = []
+    if include_editor_meta:
+        note_links = NoteLink.objects.filter(source=note).select_related("target").order_by("id")
+        for link in note_links:
+            if link.target is None:
+                link_status = "missing"
+            elif link.target.visibility == "private":
+                link_status = "private"
+            else:
+                link_status = "resolved"
+            links_out.append(
+                RenderLinkOut(
+                    target_ref=link.target_ref,
+                    link_type=link.link_type,
+                    status=link_status,
+                )
+            )
+        path_data = build_reading_path(note, note.author)
+        cycle_warnings = [w for w in path_data.get("warnings", []) if "cycle" in w.lower()]
+
     return NoteOut(
         id=note.id,
         title=note.title,
@@ -41,6 +65,8 @@ def _serialize_note(note: Note) -> NoteOut:
         author_username=note.author.username,
         created_at=note.created_at,
         updated_at=note.updated_at,
+        links=links_out,
+        cycle_warnings=cycle_warnings,
     )
 
 
@@ -82,7 +108,7 @@ def post_note(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": {"code": "validation_error", "message": str(exc)}},
         ) from exc
-    return _serialize_note(note)
+    return _serialize_note(note, include_editor_meta=True)
 
 
 @router.get("/by-slug/{username}/{slug}", response_model=NoteDetailResponse)
@@ -221,7 +247,7 @@ def get_note_for_edit(note_id: int, user: User = Depends(require_user)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": {"code": "not_found", "message": "Note not found"}},
         ) from None
-    return _serialize_note(note)
+    return _serialize_note(note, include_editor_meta=True)
 
 
 @router.patch("/{note_id}", response_model=NoteOut)
@@ -252,7 +278,38 @@ def patch_note(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": {"code": "validation_error", "message": str(exc)}},
         ) from exc
-    return _serialize_note(note)
+    return _serialize_note(note, include_editor_meta=True)
+
+
+@router.get("/{note_id}/revisions", response_model=list[NoteRevisionItem])
+def list_note_revisions(note_id: int, user: User = Depends(require_user)):
+    """List saved revisions for an owned note (newest first)."""
+    if not Note.objects.filter(id=note_id, author=user).exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "not_found", "message": "Note not found"}},
+        )
+    revisions = NoteRevision.objects.filter(note_id=note_id).order_by("-created_at", "-id")[:100]
+    return [NoteRevisionItem(id=r.id, created_at=r.created_at) for r in revisions]
+
+
+@router.get("/{note_id}/revisions/{revision_id}", response_model=NoteRevisionDetail)
+def get_note_revision(note_id: int, revision_id: int, user: User = Depends(require_user)):
+    """Retrieve a single revision's content for an owned note."""
+    try:
+        revision = (
+            NoteRevision.objects.filter(id=revision_id, note_id=note_id, note__author=user).get()
+        )
+    except NoteRevision.DoesNotExist:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "not_found", "message": "Revision not found"}},
+        ) from None
+    return NoteRevisionDetail(
+        id=revision.id,
+        content_md=revision.content_md,
+        created_at=revision.created_at,
+    )
 
 
 @router.delete("/{note_id}")

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { Metadata } from "next";
 import NoteContent from "@/components/NoteContent";
+import NoteOwnerActions from "@/components/NoteOwnerActions";
 
 interface PageProps {
   params: Promise<{
@@ -84,6 +85,7 @@ export default async function NotePage({ params }: PageProps) {
           <Link href={`/u/${note.author_username}`} className="hover:text-text">
             @{note.author_username}
           </Link>
+          <NoteOwnerActions authorUsername={note.author_username} slug={note.slug} />
           {note.tags && note.tags.length > 0 && (
             <>
               <span>&middot;</span>

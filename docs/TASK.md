@@ -92,16 +92,16 @@ Legend: **P** = priority (M must, S should, C could)
 
 ## M5. Editor
 
-- [ ] T5.1 `frontend/` with esbuild; bundle CodeMirror 6 (markdown mode) to `static/js/editor.bundle.js` (M)
-- [ ] T5.2 Editor page layout from DESIGN.md 7.4 (M)
-- [ ] T5.3 Save with Ctrl/Cmd+S, "Saved HH:MM" status, unsaved warning (M)
-- [ ] T5.4 Metadata panel: title, slug, tags, visibility (M)
-- [ ] T5.5 Live "Links found" panel using API response (S)
-- [ ] T5.6 `[[` autocomplete from `/titles` (own notes) (S)
-- [ ] T5.7 Preview toggle using `/render` (M)
-- [ ] T5.8 Cycle warning line in editor (S)
-- [ ] T5.9 Keyboard shortcuts table from DESIGN.md (S)
-- [ ] T5.10 Revisions list + view old revision (owner) (S)
+- [x] T5.1 `frontend/` with esbuild; bundle CodeMirror 6 (markdown mode) to `static/js/editor.bundle.js` (M)
+- [x] T5.2 Editor page layout from DESIGN.md 7.4 (M)
+- [x] T5.3 Save with Ctrl/Cmd+S, "Saved HH:MM" status, unsaved warning (M)
+- [x] T5.4 Metadata panel: title, slug, tags, visibility (M)
+- [x] T5.5 Live "Links found" panel using API response (S)
+- [x] T5.6 `[[` autocomplete from `/titles` (own notes) (S)
+- [x] T5.7 Preview toggle using `/render` (M)
+- [x] T5.8 Cycle warning line in editor (S)
+- [x] T5.9 Keyboard shortcuts table from DESIGN.md (S)
+- [x] T5.10 Revisions list + view old revision (owner) (S)
 
 **Done when:** you can write a whole real note in the editor without touching the mouse.
 

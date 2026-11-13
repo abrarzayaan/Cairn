@@ -19,6 +19,12 @@ class NoteUpdateIn(BaseModel):
     slug: str | None = Field(default=None, max_length=140)
 
 
+class RenderLinkOut(BaseModel):
+    target_ref: str
+    link_type: str
+    status: str = "missing"  # resolved | missing | private
+
+
 class NoteOut(BaseModel):
     id: int
     title: str
@@ -31,6 +37,8 @@ class NoteOut(BaseModel):
     author_username: str
     created_at: datetime
     updated_at: datetime
+    links: list[RenderLinkOut] = []
+    cycle_warnings: list[str] = []
 
 
 class NoteListItem(BaseModel):
@@ -89,11 +97,24 @@ class RenderIn(BaseModel):
     content_md: str = Field(default="", max_length=100000)
 
 
-class RenderLinkOut(BaseModel):
-    target_ref: str
-    link_type: str
-
-
 class RenderOut(BaseModel):
     html: str
     links: list[RenderLinkOut] = []
+
+
+class TitleSuggestionOut(BaseModel):
+    id: int
+    title: str
+    slug: str
+    visibility: str
+
+
+class NoteRevisionItem(BaseModel):
+    id: int
+    created_at: datetime
+
+
+class NoteRevisionDetail(BaseModel):
+    id: int
+    content_md: str
+    created_at: datetime

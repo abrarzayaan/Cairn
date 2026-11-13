@@ -51,6 +51,16 @@ def resolve_target_note(source_author, target_ref: str) -> Note | None:
     return Note.objects.filter(author=source_author, slug__iexact=ref).first()
 
 
+def get_link_status(viewer, target_ref: str) -> str:
+    """Return 'resolved', 'private', or 'missing' for a wikilink target reference."""
+    target = resolve_target_note(viewer, target_ref)
+    if target is None:
+        return "missing"
+    if target.visibility == "private":
+        return "private"
+    return "resolved"
+
+
 def sync_note_links(note: Note, extracted_links: list[tuple[str, str]]) -> None:
     """Replace NoteLink rows for `note` based on extracted (target_ref, link_type) tuples."""
     with transaction.atomic():
