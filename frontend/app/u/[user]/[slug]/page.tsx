@@ -40,6 +40,7 @@ export default async function NotePage({ params }: PageProps) {
 
   const data = await res.json();
   const note = data.note;
+  const directPrereqs = data.direct_prereqs || [];
 
   // Handle slug history redirect
   if (data.redirected && note.slug !== slug) {
@@ -97,6 +98,50 @@ export default async function NotePage({ params }: PageProps) {
           )}
         </div>
       </header>
+
+      {directPrereqs.length > 0 && (
+        <aside className="mb-8 rounded-md border border-border bg-bg-subtle p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="font-mono text-xs font-semibold uppercase tracking-wider text-text-muted">
+              Read first
+            </h2>
+            <Link
+              href={`/u/${user}/${note.slug}/path`}
+              className="font-mono text-xs text-accent hover:underline"
+            >
+              View full reading path &rarr;
+            </Link>
+          </div>
+          <ul className="space-y-1.5 text-sm">
+            {directPrereqs.map((prereq: {
+              key: string;
+              title: string;
+              slug: string | null;
+              author_username: string | null;
+              status: string;
+            }) => (
+              <li key={prereq.key} className="flex items-center gap-2">
+                <span className="font-mono text-xs text-text-muted">&rarr;</span>
+                {prereq.status === "ok" && prereq.slug && prereq.author_username ? (
+                  <Link
+                    href={`/u/${prereq.author_username}/${prereq.slug}`}
+                    className="font-medium text-accent hover:underline"
+                  >
+                    {prereq.title}
+                  </Link>
+                ) : prereq.status === "private" ? (
+                  <span className="font-mono text-xs text-warn">Private note</span>
+                ) : (
+                  <span className="text-text-muted">
+                    {prereq.title}{" "}
+                    <span className="font-mono text-[11px]">(not written yet)</span>
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </aside>
+      )}
 
       <NoteContent html={note.content_html} backlinks={backlinks} />
     </article>

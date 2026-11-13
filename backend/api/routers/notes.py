@@ -10,6 +10,8 @@ from api.schemas.notes import (
     NoteOut,
     NotePreviewOut,
     NoteUpdateIn,
+    PathNodeOut,
+    ReadingPathOut,
 )
 from apps.accounts.models import User
 from apps.notes.models import Note, NoteLink
@@ -21,6 +23,7 @@ from apps.notes.services.notes import (
     update_note,
     visible_notes_q,
 )
+from apps.notes.services.paths import build_reading_path, get_direct_prerequisites
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -97,7 +100,61 @@ def get_note_by_slug(
         )
     serialized = _serialize_note(note)
     serialized.content_html = resolve_wikilinks_html(note.content_html, note, viewer)
-    return NoteDetailResponse(note=serialized, redirected=redirected)
+    direct_prereqs = [PathNodeOut(**p) for p in get_direct_prerequisites(note, viewer)]
+    return NoteDetailResponse(
+        note=serialized,
+        redirected=redirected,
+        direct_prereqs=direct_prereqs,
+    )
+
+
+@router.get("/by-slug/{username}/{slug}/path", response_model=ReadingPathOut)
+def get_note_reading_path_by_slug(
+    username: str,
+    slug: str,
+    viewer: User | None = Depends(get_current_user),
+):
+    """Retrieve the topological reading path for a visible note by username and slug."""
+    note, redirected = get_visible_note(viewer, username, slug)
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "not_found", "message": "Note not found"}},
+        )
+    path_data = build_reading_path(note, viewer)
+    return ReadingPathOut(
+        root=PathNodeOut(**path_data["root"]),
+        steps=[PathNodeOut(**s) for s in path_data["steps"]],
+        warnings=path_data["warnings"],
+        has_cycle=path_data["has_cycle"],
+        redirected=redirected,
+    )
+
+
+@router.get("/{note_id}/path", response_model=ReadingPathOut)
+def get_note_reading_path(
+    note_id: int,
+    viewer: User | None = Depends(get_current_user),
+):
+    """Retrieve the topological reading path for a visible note by ID."""
+    note = (
+        Note.objects.filter(visible_notes_q(viewer))
+        .filter(id=note_id)
+        .select_related("author")
+        .first()
+    )
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "not_found", "message": "Note not found"}},
+        )
+    path_data = build_reading_path(note, viewer)
+    return ReadingPathOut(
+        root=PathNodeOut(**path_data["root"]),
+        steps=[PathNodeOut(**s) for s in path_data["steps"]],
+        warnings=path_data["warnings"],
+        has_cycle=path_data["has_cycle"],
+    )
 
 
 @router.get("/{note_id}/backlinks", response_model=list[BacklinkItem])

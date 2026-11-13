@@ -78,13 +78,13 @@ Legend: **P** = priority (M must, S should, C could)
 
 ## M4. Reading path
 
-- [ ] T4.1 `paths.py`: BFS collection with limits (depth 20, nodes 200) (M)
-- [ ] T4.2 Topological sort (Kahn) with alphabetical tie-break (M)
-- [ ] T4.3 Cycle detection + warning output (M)
-- [ ] T4.4 Placeholder nodes for private and missing targets, no expansion through private (M)
-- [ ] T4.5 "Read first" block on the note page (M)
-- [ ] T4.6 Path page `/u/<user>/<slug>/path/` + API endpoint (M)
-- [ ] T4.7 Tests: linear chain, diamond, cycle, missing, private in the middle, limits (M)
+- [x] T4.1 `paths.py`: BFS collection with limits (depth 20, nodes 200) (M)
+- [x] T4.2 Topological sort (Kahn) with alphabetical tie-break (M)
+- [x] T4.3 Cycle detection + warning output (M)
+- [x] T4.4 Placeholder nodes for private and missing targets, no expansion through private (M)
+- [x] T4.5 "Read first" block on the note page (M)
+- [x] T4.6 Path page `/u/<user>/<slug>/path/` + API endpoint (M)
+- [x] T4.7 Tests: linear chain, diamond, cycle, missing, private in the middle, limits (M)
 
 **Done when:** `Variables → Scope → Closures → Hooks` produces the right order and a private middle node does not leak.
 

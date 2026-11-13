@@ -42,9 +42,29 @@ class NoteListItem(BaseModel):
     updated_at: datetime
 
 
+class PathNodeOut(BaseModel):
+    key: str
+    id: int | None = None
+    title: str
+    slug: str | None = None
+    author_username: str | None = None
+    status: str  # ok | missing | private
+    depth: int
+    is_root: bool = False
+
+
+class ReadingPathOut(BaseModel):
+    root: PathNodeOut
+    steps: list[PathNodeOut] = []
+    warnings: list[str] = []
+    has_cycle: bool = False
+    redirected: bool = False
+
+
 class NoteDetailResponse(BaseModel):
     note: NoteOut
     redirected: bool = False
+    direct_prereqs: list[PathNodeOut] = []
 
 
 class BacklinkItem(BaseModel):
