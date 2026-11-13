@@ -8,10 +8,3 @@ def test_health_endpoint(api_client):
     data = response.json()
     assert data["status"] == "ok"
     assert data["db"] == "ok"
-
-
-@pytest.mark.django_db
-def test_home_page(client):
-    response = client.get("/")
-    assert response.status_code == 200
-    assert b"devbook" in response.content

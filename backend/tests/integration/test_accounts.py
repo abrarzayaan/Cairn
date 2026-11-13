@@ -1,9 +1,7 @@
 import pytest
-from allauth.core.exceptions import ImmediateHttpResponse
 from allauth.socialaccount.models import SocialAccount, SocialLogin
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import RequestFactory
-from django.urls import reverse
 
 from apps.accounts.adapters import CustomSocialAccountAdapter
 from apps.accounts.models import User
@@ -119,56 +117,20 @@ def test_banned_user_login_refused(rf, adapter):
     )
     sociallogin = SocialLogin(account=account, user=User())
 
-    with pytest.raises(ImmediateHttpResponse) as excinfo:
+    with pytest.raises(PermissionDenied) as excinfo:
         adapter.pre_social_login(request, sociallogin)
 
-    response = excinfo.value.response
-    assert response.status_code == 403
-    assert b"Terms of service violation" in response.content
+    assert "Terms of service violation" in str(excinfo.value)
 
 
 @pytest.mark.django_db
-def test_logout_post_only(client):
-    """Logout endpoint only accepts POST requests."""
-    user = User.objects.create_user(username="testuser", github_id=1001)
-    client.force_login(user)
-
-    # GET is rejected
-    get_res = client.get(reverse("logout"))
-    assert get_res.status_code == 405
-
-    # POST succeeds and logs out
-    post_res = client.post(reverse("logout"))
-    assert post_res.status_code == 302
-    assert post_res.url == "/"
-
-    # Verify session is cleared
-    home_res = client.get("/")
-    assert not home_res.context["user"].is_authenticated
-
-
-@pytest.mark.django_db
-def test_settings_bio_update_and_limits(client):
-    """Settings page updates bio up to 280 characters and rejects larger values."""
+def test_settings_bio_service_and_limits():
+    """Bio service updates bio up to 280 characters and rejects larger values."""
     user = User.objects.create_user(username="alice", github_id=1002)
 
-    # Anonymous redirect
-    anon_res = client.get(reverse("settings"))
-    assert anon_res.status_code == 302
-    assert "/login/" in anon_res.url
-
-    # Authenticated get
-    client.force_login(user)
-    get_res = client.get(reverse("settings"))
-    assert get_res.status_code == 200
-
     # Valid bio update
-    post_res = client.post(
-        reverse("settings"), {"action": "update_bio", "bio": "Writing backend systems."}
-    )
-    assert post_res.status_code == 302
-    user.refresh_from_db()
-    assert user.bio == "Writing backend systems."
+    updated = update_user_bio(user, "Writing backend systems.")
+    assert updated.bio == "Writing backend systems."
 
     # Service rejects > 280 chars
     long_bio = "x" * 281

@@ -1,7 +1,6 @@
 from allauth.account.adapter import DefaultAccountAdapter
-from allauth.core.exceptions import ImmediateHttpResponse
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
-from django.shortcuts import render
+from django.core.exceptions import PermissionDenied
 
 from apps.accounts.models import User
 
@@ -37,13 +36,7 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         if user:
             # Block banned users
             if user.is_banned:
-                response = render(
-                    request,
-                    "accounts/banned.html",
-                    {"reason": user.banned_reason},
-                    status=403,
-                )
-                raise ImmediateHttpResponse(response)
+                raise PermissionDenied(f"Your account has been suspended: {user.banned_reason}")
 
             # Sync username if changed and the new one is available
             if github_login and user.username.lower() != github_login.lower():
