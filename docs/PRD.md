@@ -7,7 +7,7 @@ Scope of this document: **V1 only**. Anything not listed in V1 is in "Future" an
 
 ## 1. One-line summary
 
-A developer notebook where every note can link to the concepts it depends on, so any topic can be revised fast and any newcomer gets a clear reading order. Notes can be public or private. Public notes make a developer's learning visible.
+A developer documentation and book platform where every developer organizes their technical docs into Books/Documents under their own personal Categories (their "desk"), with chapters ordered in a clear sequence and cross-linked with wikilinks. Books and notes can be Private, Public (visible on their profile), or Published (discoverable in global search).
 
 ## 2. Problem
 
@@ -18,7 +18,7 @@ A developer notebook where every note can link to the concepts it depends on, so
 
 ## 3. Product vision
 
-> A linked handbook for developers: write what you learn, link what depends on what, and let the system produce the reading order.
+> A documentation-first knowledge book platform for developers: organize your desk with personal categories and books, order chapters in a clean learning sequence, link concepts, keep drafts private, share on your profile, or publish to global discovery.
 
 ## 4. Goals (V1)
 
@@ -64,7 +64,7 @@ These are deliberately out. Do not build them.
 ### Writing
 - **US-10** As a user, I can create a note with a title and Markdown content.
 - **US-11** As a user, I can edit and delete my notes.
-- **US-12** As a user, I can mark a note Public or Private. New notes are Private.
+- **US-12** As a user, I can mark a book or note as Private, Public (profile-only), or Published (globally searchable). New items are Private.
 - **US-13** As a user, I can add up to 5 tags to a note.
 - **US-14** As a user, I can see the previous versions of a note and their timestamps.
 
@@ -77,12 +77,12 @@ These are deliberately out. Do not build them.
 - **US-25** As a reader, I can open "Reading path" for a note and see an ordered list of prerequisites to read first.
 
 ### Finding
-- **US-30** As a user, I can press Cmd/Ctrl+K and search my notes and public notes.
-- **US-31** As a user, I can filter search by tag and by author.
-- **US-32** As a user, I can browse notes by tag.
+- **US-30** As a user, I can press Cmd/Ctrl+K and search my own notes/books (`scope=mine`) and globally **published** books, notes, and profiles (`scope=all`).
+- **US-31** As a user, I can filter search by tag and by author (and by personal category within my workspace or a user's profile).
+- **US-32** As a user, when I search a topic globally, I see both published documents on that topic and the profiles of authors who published them.
 
 ### Public profile
-- **US-40** As a visitor, I can open `/u/<github-username>` and see that developer's public notes and tags.
+- **US-40** As a visitor, I can open `/u/<github-username>` (their "desk") and see that developer's personal categories, public and published books/notes, and tags.
 - **US-41** As a user, I can write a short bio.
 
 ### Safety
@@ -112,7 +112,7 @@ Priority: **M** = must (V1 blocker), **S** = should (V1 if time), **C** = could 
 | FR-N1 | Title required, 1 to 120 characters. | M |
 | FR-N2 | Slug generated from the title, unique per author, editable. | M |
 | FR-N3 | Content is Markdown, max 100,000 characters. | M |
-| FR-N4 | Visibility: `public` or `private`. Default `private`. | M |
+| FR-N4 | Visibility & Publish: `visibility` is `public` or `private` (default `private`); `is_published` is boolean (default `false`). Only `public` items can be `published`; switching to `private` forces `is_published = false`. | M |
 | FR-N5 | Up to 5 tags, lowercase, `a-z0-9-`, max 30 chars each. | M |
 | FR-N6 | Every save that changes content creates a revision with timestamp. | M |
 | FR-N7 | Changing the slug keeps old URLs working through redirects. | S |
@@ -151,17 +151,28 @@ Priority: **M** = must (V1 blocker), **S** = should (V1 if time), **C** = could 
 | ID | Requirement | Pri |
 |----|-------------|-----|
 | FR-S1 | Cmd/Ctrl+K opens a search palette on every page. | M |
-| FR-S2 | Searches title, tags, and content. Title matches rank higher. | M |
-| FR-S3 | Signed-in users see their own private notes in results, marked "private". | M |
+| FR-S2 | Global search (`scope=all`) searches only **published** books and chapters/notes (`visibility=public` AND `is_published=true`) plus developer profiles matching either username/bio or those published topics. Title matches rank higher. | M |
+| FR-S3 | Signed-in users (`scope=mine`) see all of their own books and notes (`private`, `public`, and `published`), clearly labeled with their state. | M |
 | FR-S4 | Typo tolerance on titles (trigram similarity). | S |
-| FR-S5 | Full results page `/search?q=` with tag and author filters. | M |
+| FR-S5 | Full results page `/search?q=` with type (`books`, `notes`, `users`), tag, and author filters. | M |
 | FR-S6 | Keyboard: arrows to move, Enter to open, Esc to close. | M |
+
+### 8.5.1 Books, Personal Categories, and Sequential Docs
+
+| ID | Requirement | Pri |
+|----|-------------|-----|
+| FR-B1 | Categories are **user-scoped** (not global). Each user creates and manages their own personal categories (with starter categories seeded for new accounts) to organize books on their desk. | M |
+| FR-B2 | Each Book has a Context / Table of Contents page (`/u/<user>/books/<book>`) listing chapters in explicit sequence. | M |
+| FR-B3 | When creating a note/chapter, the author chooses their personal Category, Book, and chapter sequence position (or creates a new Category / Book inline). | M |
+| FR-B4 | Owners can reorder chapters within a Book (`sequence`). | M |
+| FR-B5 | Documentation reader displays the Book's sequential chapter sidebar, "On this page" heading outline, and Previous / Next chapter navigation. | M |
+| FR-B6 | A private or hidden Book hides all of its chapters from non-owners (404 everywhere). A `public` (unpublished) Book/Note is accessible on the author's profile and direct URL, but excluded from Global Search and Home feeds. | M |
 
 ### 8.6 Profile
 
 | ID | Requirement | Pri |
 |----|-------------|-----|
-| FR-P1 | `/u/<username>` lists public notes (updated date, tags) and tag counts. | M |
+| FR-P1 | `/u/<username>` acts as the developer's desk: lists their personal categories (containing visible public/published books), public and published books/notes, updated dates, and tag counts. | M |
 | FR-P2 | Bio: plain text, max 280 characters. | M |
 | FR-P3 | Link to the user's GitHub profile. | M |
 | FR-P4 | Activity heatmap and streak (from revision timestamps). | C (Phase 3) |
@@ -181,30 +192,31 @@ Priority: **M** = must (V1 blocker), **S** = should (V1 if time), **C** = could 
 | ID | Requirement | Pri |
 |----|-------------|-----|
 | FR-G1 | Public note pages are server-rendered with title, meta description, canonical URL. | M |
-| FR-G2 | `sitemap.xml` and `robots.txt` list only public, non-hidden notes. | S |
+| FR-G2 | `sitemap.xml` and `robots.txt` list only `published` (`visibility=public` + `is_published=true`), non-hidden notes and books. | S |
 | FR-G3 | Light and dark theme following system setting, with manual toggle. | S |
 | FR-G4 | Fully usable on a phone screen (reading). Editing works but is not optimised. | M |
 | FR-G5 | Custom 404 and 500 pages. | M |
 
-## 9. Visibility rules (the important table)
+## 9. Visibility & Publish rules (the important table)
 
-A note's visibility decides who can see **the note and every trace of it**.
+A note or book has two access dimensions: `visibility` (`private` | `public`) and `is_published` (`false` | `true`, only allowed when `public`). Together they decide who can see **the item and where it is discovered**.
 
-| Surface | Public note | Private note |
-|---------|-------------|--------------|
-| Note page | Anyone | Owner only (others get 404) |
-| Search results | Anyone | Owner only |
-| Profile page | Listed | Never listed |
-| Backlinks on other notes | Shown | Never shown to others |
-| Link from a public note to it | Normal link | Shown as "Private note" to others |
-| Reading path | Included | Placeholder only, not expanded |
-| Hover preview | Allowed | Owner only |
-| Sitemap | Included | Never |
-| Revisions | Owner only | Owner only |
+| Surface | Published (`public` + `is_published=true`) | Public (`public` + `is_published=false`, profile only) | Private (`private`) |
+|---------|----------------------------------------------|--------------------------------------------------------|---------------------|
+| Note / Book page | Anyone | Anyone | Owner only (others get 404) |
+| Global search & Home Hub feeds | Anyone (document + matching author profile) | Owner only (`scope=mine`); hidden from global search/home | Owner only (`scope=mine`) |
+| Author profile page (`/u/<user>/`) | Listed under owner's personal category | Listed under owner's personal category | Never listed |
+| Tag pages (`/tags/<tag>/`) | Included | Never included | Never included |
+| Backlinks on other notes | Shown | Shown (on accessible public notes) | Never shown to others |
+| Link from a public note to it | Normal link | Normal link | Shown as "Private note" to others |
+| Reading path | Included | Included | Placeholder only, not expanded |
+| Hover preview | Allowed | Allowed | Owner only |
+| Sitemap | Included | Never | Never |
+| Revisions | Owner only | Owner only | Owner only |
 
 Private notes return **404, not 403**, to non-owners so existence is not revealed.
 
-Changing Public → Private takes effect immediately everywhere, including cached pages.
+Unpublishing (`Published → Public`) removes the item from global search, home feeds, tag pages, and sitemap immediately, while keeping it visible on the author's profile and direct URL. Changing `Public/Published → Private` takes effect immediately everywhere, including cached pages, and automatically resets `is_published = false`.
 
 ## 10. Non-functional requirements
 

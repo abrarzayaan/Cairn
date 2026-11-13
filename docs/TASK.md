@@ -152,17 +152,60 @@ Legend: **P** = priority (M must, S should, C could)
 
 ## M9. Frontend polish to match DESIGN.md
 
-- [ ] T9.1 `tokens.css` with all colors, fonts, spacing, light + dark (M)
-- [ ] T9.2 Self-host fonts (Plex Sans, Source Serif 4, Plex Mono, Bengali fallbacks) (M)
-- [ ] T9.3 Base layout: top bar, 3-column note layout, responsive rules (M)
-- [ ] T9.4 Components: buttons, inputs, tags, link-type markers, code block with copy, tables, blockquote (M)
-- [ ] T9.5 Theme toggle with cookie (no flash) (S)
-- [ ] T9.6 Empty states and inline error messages with the copy rules (M)
-- [ ] T9.7 Accessibility pass: skip link, focus rings, aria for palette, keyboard-only run-through (M)
-- [ ] T9.8 Contrast check, 200% zoom check, 360px check (M)
-- [ ] T9.9 Run the DESIGN.md section 14 checklist (M)
+- [x] T9.1 `tokens.css` with all colors, fonts, spacing, light + dark (M)
+- [x] T9.2 Self-host fonts (Plex Sans, Source Serif 4, Plex Mono, Bengali fallbacks) (M)
+- [x] T9.3 Base layout: top bar, 3-column note layout, responsive rules (M)
+- [x] T9.4 Components: buttons, inputs, tags, link-type markers, code block with copy, tables, blockquote (M)
+- [x] T9.5 Theme toggle with cookie (no flash) (S)
+- [x] T9.6 Empty states and inline error messages with the copy rules (M)
+- [x] T9.7 Accessibility pass: skip link, focus rings, aria for palette, keyboard-only run-through (M)
+- [x] T9.8 Contrast check, 200% zoom check, 360px check (M)
+- [x] T9.9 Run the DESIGN.md section 14 checklist (M)
 
 **Done when:** the "does this look AI-made?" test passes with a developer friend.
+
+---
+
+## M9B. Book-First Documentation Architecture & Redesign
+
+### Phase 1: Backend (Categories, Books, Sequential Chapters, Unified Search)
+- [x] TB.1 `Category` & `Book` models + `Note.book` / `Note.sequence` fields + migrations + preset categories (M)
+- [x] TB.2 Visibility rules: `visible_books_q(viewer)` & `visible_notes_q(viewer)` enforce book-level privacy/moderation (M)
+- [x] TB.3 Services & FastAPI routers: `/categories`, `/books` CRUD + `/books/by-slug/{u}/{b}` + `/books/{id}/reorder` (M)
+- [x] TB.4 Update `/notes` create/update/detail to support `book_id`, `sequence`, book chapters list, and `prev_chapter` / `next_chapter` (M)
+- [x] TB.5 Unified Search & Home/Profile feeds across Books, Chapters/Notes, Categories, and Developer Profiles (M)
+- [x] TB.6 Register `Category` and `Book` in Django Admin + Hide/Unhide Book actions (S)
+- [x] TB.7 Integration tests for Categories, Books, chapter sequencing/reordering, book-level privacy, and unified search (M)
+
+### Phase 2: Frontend (Documentation-First Experience)
+- [x] TF.1 Home Docs Hub (`/`) with Category explorer, Public Books library, and Personal Bookshelf (M)
+- [x] TF.2 Book Context / Table of Contents page (`/u/<user>/books/<book>`) with sequential chapters, reorder controls, and Start Reading CTA (M)
+- [x] TF.3 3-Column Documentation Reader (`/u/<user>/<slug>`) with Book Sequence Sidebar, "On this page" heading outline, and Prev/Next Chapter navigation (M)
+- [x] TF.4 Organize-first Editor (`/new`, `.../edit`) with Category -> Book -> Sequence selector + inline `+ New Book` modal (M)
+- [x] TF.5 Updated Developer Profile (`/u/<user>`) grouped by Category & Book + Unified Search (`Ctrl+K` & `/search`) (M)
+
+---
+
+## M9C. Personal Categories (Desk) & Publish-for-Search Flow
+
+### Phase 1: Backend (User-Scoped Categories & Publish State)
+- [ ] TC.1 Schema & migration: add `Category.author` FK (`author + slug` and `author + lower(name)` unique constraints), migrate/clone existing global categories per book author, and seed starter categories per user (M)
+- [ ] TC.2 Schema & migration: add `is_published` (default `False`) + DB check constraint (`visibility = 'public' OR is_published = False`) and partial indexes on `Book` and `Note` (M)
+- [ ] TC.3 Update `visible_books_q` / `visible_notes_q` (profile + direct read) and add `published_books_q` / `published_notes_q` (global discovery: `public` + `is_published=True` + `ok` + unbanned) (M)
+- [ ] TC.4 Personal Category services & API: scope `GET /categories` (own desk or `?username=` visible desk categories), `POST /categories`, `PATCH /categories/{id}`, `DELETE /categories/{id}` with ownership checks (M)
+- [ ] TC.5 Update `Book` & `Note` services/schemas (`/books`, `/notes`) to support `is_published` toggle and enforce `private` → `is_published=False` automatically (M)
+- [ ] TC.6 Update Global Search, Home Hub, & Tag pages: use `published_*_q` for `scope=all` / home feeds / tags, keep `visible_*_q` for profile (`/u/<user>`) and `scope=mine`, and match developer profiles by **published topic/docs** as well as username/bio (M)
+- [ ] TC.7 Update Django Admin & `sitemap.xml` / `robots.txt` rules to reflect `is_published` and per-author categories (S)
+
+### Phase 2: Frontend (Desk Categories, Publish Controls, Topic+Profile Search)
+- [ ] TC.8 Editor (`NoteEditor.tsx`) & Book modal/settings: 3-state access control (`Private`, `Public (profile only)`, `Published (globally searchable)`) + inline `+ New Category` creation/management on personal desk (M)
+- [ ] TC.9 Profile Desk (`/u/<user>`): display user's personal categories (only those with visible public/published books) as desk shelves, plus clear `Public` vs `Published` badges for owner (M)
+- [ ] TC.10 Home Hub (`/`) & Search (`SearchPalette.tsx`, `/search`): show only **published** docs/books globally, remove global category filter (keep category filter in `scope=mine` / profile), and render matching author profiles alongside topic search results (M)
+
+### Phase 3: Tests & Verification
+- [ ] TC.11 Integration & security tests: personal category isolation (no cross-user edit/delete, private-only categories hidden on profile), `public` vs `published` leak matrix (unpublished public docs never appear in global search/home/tags/sitemap), and topic-based profile discovery in global search (M)
+
+**Done when:** each user has their own personal categories on their desk; `Public` docs show only on their profile/direct link; `Published` docs appear in global search together with the author's profile.
 
 ---
 
@@ -245,6 +288,3 @@ Part-time, that is roughly 2.5 to 4 months. The shortest useful version for your
 - [ ] Teams and bootcamp workspaces
 - [ ] Paid plans, custom domains
 - [ ] Hiring layer (opt-in public profile for recruiters)
-
-
-#chacnges

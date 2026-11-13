@@ -9,7 +9,7 @@ Read first: PRD.md (what), ARCHITECTURE.md (how), DESIGN.md (look), SECURITY_CHE
 ## 1. Golden rules
 
 1. **Build only what the PRD says for V1.** No extra features, no "while I'm here" additions.
-2. **Private means private.** Every query that returns notes goes through `visible_notes_q(viewer)`. No exceptions.
+2. **Private means private; Public vs Published is explicit.** Every query returning notes/books goes through `visible_notes_q(viewer)` / `visible_books_q(viewer)`, and global discovery queries (global search, home hub, tags, sitemap) go through `published_notes_q()` / `published_books_q()`. No exceptions.
 3. **Business logic lives in `services/`.** Views and routers only parse input, call a service, and shape output.
 4. **No new dependency without a reason.** Ask first. Prefer the standard library and what is already installed.
 5. **Small, reviewable changes.** One concern per commit and per pull request.

@@ -140,3 +140,50 @@ def test_search_api_filters_and_pagination(api_client, client):
     mine_res = api_client.get("/api/v1/search?q=Python&scope=mine")
     assert mine_res.status_code == 200
     assert mine_res.json()["total"] == 6
+
+
+@pytest.mark.django_db(transaction=True)
+def test_home_feed_and_profile_visibility(api_client, client):
+    """Home feed and profile endpoints never leak private notes to others."""
+    alice = User.objects.create_user(username="alice_prof", github_id=9110, bio="Builder")
+    bob = User.objects.create_user(username="bob_prof", github_id=9111)
+
+    create_note(
+        author=alice,
+        title="Alice Public Guide",
+        content_md="Public content",
+        tags=["guide"],
+        visibility="public",
+    )
+    create_note(
+        author=alice,
+        title="Alice Secret Note",
+        content_md="Private content",
+        tags=["secret-tag"],
+        visibility="private",
+    )
+
+    # Anonymous home feed only shows public note and public tags
+    anon_home = api_client.get("/api/v1/home")
+    assert anon_home.status_code == 200
+    home_data = anon_home.json()
+    assert [n["title"] for n in home_data["recent_public"]] == ["Alice Public Guide"]
+    assert [t["name"] for t in home_data["topics"]] == ["guide"]
+    assert home_data["my_notes"] == []
+
+    # Bob viewing Alice's profile only sees Alice's public note
+    _login_api_client(api_client, client, bob)
+    bob_prof = api_client.get("/api/v1/users/alice_prof/profile")
+    assert bob_prof.status_code == 200
+    assert bob_prof.json()["is_self"] is False
+    assert [n["title"] for n in bob_prof.json()["notes"]] == ["Alice Public Guide"]
+
+    # Alice viewing her own profile and home sees both
+    _login_api_client(api_client, client, alice)
+    alice_home = api_client.get("/api/v1/home")
+    assert alice_home.status_code == 200
+    assert alice_home.json()["stats"] == {"total": 2, "public": 1, "private": 1}
+    alice_prof = api_client.get("/api/v1/users/alice_prof/profile")
+    assert alice_prof.status_code == 200
+    assert alice_prof.json()["is_self"] is True
+    assert len(alice_prof.json()["notes"]) == 2

@@ -13,7 +13,7 @@ Implementation: **Next.js (React, TypeScript) with Tailwind CSS, design tokens, 
 3. **Looks hand-built.** Few colors, real typography, borders instead of shadows, specific copy.
 4. **Keyboard first.** Every frequent action has a shortcut. The mouse is optional.
 5. **Nothing decorative.** If an element does not help reading, writing, or finding, remove it.
-6. **State is visible.** Public/private, missing links, and cycles are always visible, never hidden in a tooltip only.
+6. **State is visible.** Visibility (`private` / `public` / `published`), missing links, and cycles are always visible, never hidden in a tooltip only.
 
 ## 2. What to avoid (the "AI template" tells)
 
@@ -120,31 +120,34 @@ Rules:
 - Top bar height **44px**, sticky, 1px bottom border.
 - Page uses a documentation-style layout, not a centered marketing column.
 
-### Note page (desktop, 1100px and up)
+### Documentation & Chapter page (desktop, 1100px and up)
 
 ```
 +--------------------------------------------------------------------------+
-| cairn     [ Search notes...                    Ctrl K ]   New    @rahim  |
+| cairn     [ Search books, docs, topics...      Ctrl K ]   +New   @rahim  |
 +--------------------------------------------------------------------------+
-| rahim / notes        | Read first                       | On this page   |
-|                      |  1. Variables                    |  What it is    |
-| #javascript (12)     |  2. Scope                        |  Example       |
-|   Variables          |  Full path ->                    |  Common bugs   |
-|   Scope              | ---------------------------------|                |
-|   Closures   <       |                                  | Linked from    |
-|   Hoisting           | Closures            [public]     |  Hooks         |
-| #react (7)           | updated 3 days ago  #javascript  |  Currying      |
-|   Hooks              |                                  |                |
-|   State              | A closure is a function that     |                |
-|                      | remembers the variables around   |                |
-|  240px               | it...   (68ch max)               |  220px         |
+| Book: JS Internals   | Category / JS Internals / Ch. 3  | On this page   |
+| (JavaScript)         | ---------------------------------|  What it is    |
+|                      | Closures            [public]     |  Example       |
+| 01. Variables        | updated 3 days ago  #javascript  |  Common bugs   |
+| 02. Scope            |                                  |                |
+| 03. Closures     <   | A closure is a function that     | Referenced by  |
+| 04. Event Loop       | remembers the variables around   |  Hooks         |
+|                      | it...   (68ch max)               |  Currying      |
+| Read first: Scope    |                                  |                |
+|                      | [ <- Ch. 2: Scope ] [ Ch. 4 -> ] |                |
+|  240px               |                                  |  230px         |
 +----------------------+----------------------------------+----------------+
 ```
 
-- Left column: the author's notes grouped by first tag. Own notes when it is your page, otherwise the author's public notes. Collapsible.
-- Center: content, max 68ch.
-- Right: "On this page" (headings) and "Linked from" (backlinks).
-- Below 1100px the right column moves under the content. Below 760px the left column becomes a drawer opened by a text button `Notes`. "Read first" always stays on top of the content.
+- Left column: Book / Document sequential **Table of Contents** (`01`, `02`, `03`...) highlighting the current chapter, plus direct prerequisites ("Read first"). Collapsible drawer on mobile.
+- Center: Documentation reading surface (`68ch` max) with breadcrumb (`Category / Book / Chapter`), code blocks with Copy button, and **← Previous Chapter / Next Chapter →** navigation footer.
+- Right: "On this page" (auto-generated H2/H3 outline) and "Referenced by" (backlinks).
+
+### 7.1.1 Book Context / Table of Contents page (`/u/<user>/books/<book>`)
+
+- Header: Personal Category badge, Book Title, description, state (`private` / `public` / `published`), author, and `Start Reading →` CTA.
+- Sequential Chapter Index: numbered chapters (`01`, `02`, `03`...) with summaries and reading time/status. Owner can reorder chapters (`Up`/`Down`), toggle Publish, and click `+ Add Chapter` directly into that book and sequence.
 
 ## 7. Pages
 
@@ -177,8 +180,8 @@ Big-O basics        sara   5d       sql          18
 
 See the layout above. Elements:
 
-- **Title** (H1), then a meta line in mono: `public · updated 12 Nov 2026 · #javascript #scope`.
-- **Visibility** shown as the word `public` or `private` in the meta line. Private is shown with the `--warn` color text.
+- **Title** (H1), then a meta line in mono: `published · updated 12 Nov 2026 · #javascript #scope`.
+- **Visibility & Publish state** shown clearly as `published` (global + profile), `public` (profile only), or `private` (owner only, in `--warn` color text).
 - **Read first box** (only if the note has prerequisites). A bordered block, not a colored callout.
   - Ordered list of up to 5 notes, nearest prerequisite last.
   - `Full path ->` link opens the path page.
@@ -211,9 +214,10 @@ Plain numbered list, mono numbers. Each item shows its author when it is not the
 |  # Closures                                | Title    [Closures        ] |
 |                                            | Slug     [closures        ] |
 |  A closure is a function that remembers    | Tags     [javascript scope] |
-|  [[prereq:Scope]] ...                      | Visibility                  |
-|                                            |  ( ) Private  (x) Public    |
-|  (CodeMirror, mono, 15px)                  |                             |
+|  [[prereq:Scope]] ...                      | Access                      |
+|                                            |  ( ) Private                |
+|  (CodeMirror, mono, 15px)                  |  ( ) Public (profile only)  |
+|                                            |  (x) Published (searchable) |
 |                                            | Links found (3)             |
 |                                            |  prereq  Scope     resolved |
 |                                            |  related Hoisting  missing  |
@@ -221,8 +225,9 @@ Plain numbered list, mono numbers. Each item shows its author when it is not the
 +--------------------------------------------+-----------------------------+
 ```
 
-- Editor is CodeMirror 6 with Markdown mode. Typing `[[` opens an autocomplete of the user's note titles; `prereq:` and `deep:` are suggested.
-- `Preview` toggles the editor area to the rendered note (same typography as the real page).
+- Editor is CodeMirror 6 with Markdown mode (`Write | Split | Preview`). Typing `[[` opens an autocomplete of the user's note titles; `prereq:` and `deep:` are suggested.
+- Organize-first metadata: before or while writing, the author assigns the note's **Personal Category** (with inline `+ New Category`), **Book / Document** (with inline `+ New Book` creation), and **Chapter Sequence** number.
+- `Split` / `Preview` shows rendered documentation side-by-side or full width.
 - Save with Ctrl/Cmd+S. Status text `Saved 12:04` or `Unsaved changes`. No toasts.
 - Leaving with unsaved changes asks the browser's native confirm.
 - Cycle in prerequisites: inline warning line under "Links found" in `--warn`.
@@ -252,10 +257,11 @@ Plain numbered list, mono numbers. Each item shows its author when it is not the
 ```
 
 - Centered modal, 560px wide, 1px border, no shadow, `--bg` background over a 40% black overlay.
-- Results: title, author (`you` for own), first tag or `private`. Max 8. Matched characters shown in `--accent-bg`.
+- Global search shows only **published** books and notes alongside matching developer profiles (matching name, bio, or published topics). `My workspace` scope shows all own notes (`private`, `public`, `published`).
+- Results: title, author (`you` for own), first tag or state (`private` / `public` / `published`). Max 8. Matched characters shown in `--accent-bg`.
 - Footer line shows keys in mono.
 
-### 7.6 Profile
+### 7.6 Profile ("Developer Desk")
 
 ```
 rahim                                   github.com/rahim
@@ -263,6 +269,7 @@ Frontend developer. Learning backend.   Joined Mar 2026
 
 42 public notes   ·   12 topics
 
+Personal Categories:  All   Backend (4)   JS Internals (2)   DevOps (1)
 Topics:  #javascript 14   #react 9   #sql 7   #git 6
 
 Notes
@@ -272,7 +279,7 @@ Event loop                   #javascript    09 Nov 2026
 ```
 
 - No avatar in V1 (text only). Username in mono.
-- Notes list is a table-like list sorted by updated date; filter by tag via the topic row.
+- Shows the developer's desk organized by their **personal categories** (containing visible public/published books) and tags. Visitors see both `public` and `published` items here.
 - Phase 3: a 53x7 grid of 10px squares (heatmap) between the counts and the topic row, 5 levels from `--bg-inset` to `--accent`.
 
 ### 7.7 Settings

@@ -1,13 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import MarkdownEditor from "@/components/MarkdownEditor";
+import CreateBookModal from "@/components/CreateBookModal";
+import MarkdownEditor, {
+  MarkdownEditorHandle,
+} from "@/components/MarkdownEditor";
 import NoteContent from "@/components/NoteContent";
 import {
+  BookSummary,
+  Category,
   createNote,
   deleteNote,
+  fetchCategories,
   fetchMe,
+  fetchMyBooks,
   fetchNoteForEdit,
   fetchNoteIdBySlug,
   fetchNoteRevisionDetail,
@@ -25,6 +33,23 @@ interface NoteEditorProps {
   slug?: string;
 }
 
+type ViewMode = "write" | "split" | "preview";
+
+const TEMPLATES: Record<string, { title?: string; tags: string; body: string }> = {
+  concept: {
+    tags: "concept",
+    body: "## Prerequisites\n\n- [[prereq:Foundational Concept]]\n\n## Core Idea\n\nExplain the concept clearly in your own words.\n\n## Example\n\n```ts\n// Minimal working example\n```\n\n## Related\n\n- [[deep:Advanced Topic]]\n",
+  },
+  deep: {
+    tags: "internals",
+    body: "## Overview\n\nBuilds on [[prereq:Core Concept]].\n\n## Internals & Edge Cases\n\n- Edge case 1\n- Edge case 2\n",
+  },
+  debug: {
+    tags: "debugging",
+    body: "## Symptom\n\nWhat broke and where?\n\n## Root Cause\n\nWhy did it happen?\n\n## Fix\n\n```\nCommand or patch that solved it\n```\n",
+  },
+};
+
 function formatHHMM(date: Date): string {
   return date.toTimeString().slice(0, 5);
 }
@@ -39,6 +64,7 @@ function parseTagsInput(raw: string): string[] {
 
 export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
   const router = useRouter();
+  const editorRef = useRef<MarkdownEditorHandle | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -51,12 +77,19 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
   const [visibility, setVisibility] = useState<"public" | "private">("private");
   const [contentMd, setContentMd] = useState("");
 
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [myBooks, setMyBooks] = useState<BookSummary[]>([]);
+  const [categoryFilterId, setCategoryFilterId] = useState<number | "all">("all");
+  const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
+  const [sequence, setSequence] = useState<number>(1);
+  const [bookModalOpen, setBookModalOpen] = useState(false);
+
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusText, setStatusText] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [previewMode, setPreviewMode] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("write");
   const [previewHtml, setPreviewHtml] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
 
@@ -64,13 +97,19 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
   const [cycleWarnings, setCycleWarnings] = useState<string[]>([]);
 
   const [revisions, setRevisions] = useState<NoteRevisionItem[]>([]);
-  const [viewingRevision, setViewingRevision] = useState<NoteRevisionDetail | null>(
-    null
-  );
+  const [viewingRevision, setViewingRevision] =
+    useState<NoteRevisionDetail | null>(null);
 
   const renderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load auth + existing note if in edit mode
+  const wordStats = useMemo(() => {
+    const trimmed = contentMd.trim();
+    const words = trimmed ? trimmed.split(/\s+/).length : 0;
+    const lines = contentMd ? contentMd.split("\n").length : 1;
+    return { words, lines };
+  }, [contentMd]);
+
+  // Load auth + existing note or query templates
   useEffect(() => {
     let cancelled = false;
     async function init() {
@@ -88,6 +127,41 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
         setOwnerUsername(auth.user.username);
       }
 
+      const [catsList, booksList] = await Promise.all([
+        fetchCategories(),
+        fetchMyBooks(),
+      ]);
+      if (!cancelled) {
+        setCategories(catsList);
+        setMyBooks(booksList);
+      }
+
+      if (mode === "new" && typeof window !== "undefined") {
+        const sp = new URLSearchParams(window.location.search);
+        const qTitle = sp.get("title");
+        const qTpl = sp.get("template");
+        const qBook = sp.get("book");
+        if (qTitle && !cancelled) {
+          setTitle(qTitle);
+          setDirty(true);
+        }
+        if (qTpl && TEMPLATES[qTpl] && !cancelled) {
+          const tpl = TEMPLATES[qTpl];
+          setTagsInput(tpl.tags);
+          setContentMd(tpl.body);
+          setDirty(true);
+        }
+        if (qBook && !cancelled) {
+          const matched = booksList.find((b) => String(b.id) === qBook);
+          if (matched) {
+            setSelectedBookId(matched.id);
+            setCategoryFilterId(matched.category.id);
+            setSequence((matched.chapter_count || 0) + 1);
+            setVisibility(matched.visibility);
+          }
+        }
+      }
+
       if (mode === "edit" && username && slug) {
         try {
           const id = await fetchNoteIdBySlug(username, slug);
@@ -99,6 +173,11 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
             setTagsInput(note.tags.join(" "));
             setVisibility(note.visibility);
             setContentMd(note.content_md);
+            setSelectedBookId(note.book ? note.book.id : null);
+            if (note.book) {
+              setCategoryFilterId(note.book.category.id);
+            }
+            setSequence(note.sequence || 1);
             setLinksFound(note.links || []);
             setCycleWarnings(note.cycle_warnings || []);
             setOwnerUsername(note.author_username);
@@ -111,7 +190,9 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
         } catch (err) {
           if (!cancelled) {
             setErrorMsg(
-              err instanceof Error ? err.message : "Could not load note for editing."
+              err instanceof Error
+                ? err.message
+                : "Could not load note for editing."
             );
           }
         }
@@ -137,7 +218,7 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [dirty]);
 
-  // Debounced live links extraction while typing
+  // Debounced live links extraction + live split preview
   useEffect(() => {
     if (loading || authError) return;
     if (renderTimerRef.current) clearTimeout(renderTimerRef.current);
@@ -146,18 +227,18 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
       try {
         const res = await renderMarkdownPreview(contentMd);
         setLinksFound(res.links);
-        if (previewMode) {
+        if (viewMode !== "write") {
           setPreviewHtml(res.html);
         }
       } catch {
         // Ignore rate-limit or transient preview errors during typing
       }
-    }, 500);
+    }, 400);
 
     return () => {
       if (renderTimerRef.current) clearTimeout(renderTimerRef.current);
     };
-  }, [contentMd, loading, authError, previewMode]);
+  }, [contentMd, loading, authError, viewMode]);
 
   const handleSave = useCallback(
     async (andView = false) => {
@@ -181,9 +262,12 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
             tags: parsedTags,
             visibility,
             slug: noteSlug.trim() || undefined,
+            book_id: selectedBookId,
+            sequence: selectedBookId ? Math.max(1, sequence) : 1,
           });
           setNoteId(saved.id);
           setNoteSlug(saved.slug);
+          setSequence(saved.sequence || 1);
           setLinksFound(saved.links || []);
           setCycleWarnings(saved.cycle_warnings || []);
           setDirty(false);
@@ -193,7 +277,6 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
             router.push(`/u/${saved.author_username}/${saved.slug}`);
             return;
           }
-          // Replace URL to edit route without full reload
           window.history.replaceState(
             null,
             "",
@@ -208,8 +291,11 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
             tags: parsedTags,
             visibility,
             slug: noteSlug.trim() || undefined,
+            book_id: selectedBookId,
+            sequence: selectedBookId ? Math.max(1, sequence) : 1,
           });
           setNoteSlug(saved.slug);
+          setSequence(saved.sequence || 1);
           setLinksFound(saved.links || []);
           setCycleWarnings(saved.cycle_warnings || []);
           setDirty(false);
@@ -245,29 +331,41 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
       noteSlug,
       router,
       slug,
+      selectedBookId,
+      sequence,
     ]
   );
 
-  const handleTogglePreview = useCallback(async () => {
-    if (previewMode) {
-      setPreviewMode(false);
-      return;
-    }
-    setPreviewLoading(true);
-    setErrorMsg(null);
-    try {
-      const res = await renderMarkdownPreview(contentMd);
-      setPreviewHtml(res.html);
-      setLinksFound(res.links);
-      setPreviewMode(true);
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Failed to render preview.");
-    } finally {
-      setPreviewLoading(false);
-    }
-  }, [previewMode, contentMd]);
+  const switchViewMode = useCallback(
+    async (next: ViewMode) => {
+      if (next === viewMode) return;
+      if (next === "write") {
+        setViewMode("write");
+        return;
+      }
+      setPreviewLoading(true);
+      setErrorMsg(null);
+      try {
+        const res = await renderMarkdownPreview(contentMd);
+        setPreviewHtml(res.html);
+        setLinksFound(res.links);
+        setViewMode(next);
+      } catch (err) {
+        setErrorMsg(
+          err instanceof Error ? err.message : "Failed to render preview."
+        );
+      } finally {
+        setPreviewLoading(false);
+      }
+    },
+    [viewMode, contentMd]
+  );
 
-  // Global document-level shortcuts (when focus is outside CodeMirror)
+  const handleTogglePreview = useCallback(() => {
+    switchViewMode(viewMode === "write" ? "split" : viewMode === "split" ? "preview" : "write");
+  }, [switchViewMode, viewMode]);
+
+  // Global document-level shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const isMod = e.ctrlKey || e.metaKey;
@@ -300,7 +398,9 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
 
   const handleDelete = async () => {
     if (!noteId) return;
-    if (!window.confirm("Permanently delete this note? This cannot be undone.")) {
+    if (
+      !window.confirm("Permanently delete this note? This cannot be undone.")
+    ) {
       return;
     }
     try {
@@ -318,7 +418,9 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
       const detail = await fetchNoteRevisionDetail(noteId, revId);
       setViewingRevision(detail);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Failed to load revision.");
+      setErrorMsg(
+        err instanceof Error ? err.message : "Failed to load revision."
+      );
     }
   };
 
@@ -332,101 +434,318 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
 
   if (authError) {
     return (
-      <div className="mx-auto max-w-md py-16">
+      <div className="mx-auto max-w-md rounded border border-border bg-bg-subtle p-6 my-12 text-center">
         <p className="mb-4 text-sm text-warn">{authError}</p>
-        <a
+        <Link
           href="/login"
-          className="inline-flex h-8 items-center rounded border border-text bg-text px-3 text-xs font-medium text-bg hover:no-underline"
+          className="inline-flex h-9 items-center rounded border border-text bg-text px-4 font-mono text-xs font-medium text-bg hover:no-underline"
         >
           Sign in with GitHub
-        </a>
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-[1100px] py-4">
-      {/* Top editor bar (DESIGN.md 7.4) */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-        <button
-          type="button"
-          onClick={handleBack}
-          className="flex items-center gap-1.5 font-mono text-sm text-text-muted hover:text-text"
-        >
-          <span>&larr;</span>
-          <span className="max-w-[320px] truncate font-medium text-text">
-            {title.trim() || "New note"}
-          </span>
-        </button>
-
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-xs text-text-muted">
-            {saving
-              ? "Saving..."
-              : dirty
-              ? "Unsaved changes"
-              : statusText || ""}
-          </span>
-
+    <div className="space-y-4">
+      {/* Studio Top Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-border bg-bg-subtle px-4 py-2.5">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
-            onClick={handleTogglePreview}
-            disabled={previewLoading}
-            className={`inline-flex h-7 items-center rounded border px-2.5 font-mono text-xs ${
-              previewMode
-                ? "border-accent bg-accent-bg text-text"
-                : "border-border-strong bg-bg text-text hover:bg-bg-subtle"
-            }`}
+            onClick={handleBack}
+            className="flex items-center gap-1.5 font-mono text-xs text-text-muted hover:text-text"
           >
-            {previewLoading ? "..." : previewMode ? "Edit" : "Preview"}
+            <span>&larr;</span>
+            <span className="max-w-[240px] truncate font-medium text-text">
+              {title.trim() || "New note"}
+            </span>
           </button>
+
+          <span className="hidden h-4 w-px bg-border sm:inline-block" />
+
+          <span className="flex items-center gap-1.5 font-mono text-xs">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                saving
+                  ? "bg-accent animate-pulse"
+                  : dirty
+                  ? "bg-warn"
+                  : "bg-ok"
+              }`}
+            />
+            <span className="text-text-muted">
+              {saving
+                ? "Saving..."
+                : dirty
+                ? "Unsaved changes"
+                : statusText || "Draft"}
+            </span>
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 3-Mode Switcher */}
+          <div
+            className="flex rounded border border-border-strong bg-bg p-0.5 font-mono text-xs"
+            role="group"
+            aria-label="Editor view mode"
+          >
+            {(["write", "split", "preview"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => switchViewMode(m)}
+                disabled={previewLoading && m !== "write"}
+                className={`rounded px-2.5 py-1 capitalize transition-colors ${
+                  viewMode === m
+                    ? "bg-text text-bg font-medium"
+                    : "text-text-muted hover:text-text"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
 
           <button
             type="button"
             onClick={() => handleSave(false)}
             disabled={saving}
-            className="inline-flex h-7 items-center rounded border border-text bg-text px-3 text-xs font-medium text-bg hover:border-text-muted hover:bg-text-muted disabled:opacity-50"
+            className="inline-flex h-8 items-center rounded border border-border-strong bg-bg px-3 font-mono text-xs font-medium text-text hover:bg-bg-inset disabled:opacity-50"
           >
             Save
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSave(true)}
+            disabled={saving}
+            className="inline-flex h-8 items-center rounded border border-text bg-text px-3 font-mono text-xs font-medium text-bg hover:border-text-muted hover:bg-text-muted disabled:opacity-50"
+          >
+            Save &amp; View
           </button>
         </div>
       </div>
 
       {errorMsg && (
-        <div className="mb-4 rounded border border-warn bg-bg-subtle px-3 py-2 font-mono text-xs text-warn">
+        <div className="rounded border border-warn bg-bg-subtle px-3 py-2 font-mono text-xs text-warn">
           {errorMsg}
         </div>
       )}
 
-      {/* Main 2-column workspace */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_290px]">
-        {/* Left: CodeMirror 6 or Preview */}
-        <div className="min-w-0 border-r-0 lg:border-r lg:border-border lg:pr-6">
-          {previewMode ? (
-            <div className="min-h-[520px] py-2">
-              <h1 className="mb-4 font-sans text-3xl font-semibold tracking-tight text-text">
-                {title || "Untitled"}
-              </h1>
-              <NoteContent html={previewHtml} backlinks={[]} />
+      {/* Main Studio Workspace */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px]">
+        {/* Left: Write / Split / Preview Canvas */}
+        <div className="min-w-0 rounded border border-border bg-bg">
+          {/* Quick Syntax Insert Bar */}
+          {viewMode !== "preview" && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-bg-subtle px-3 py-1.5 font-mono text-[11px]">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 text-text-muted">Insert:</span>
+                <button
+                  type="button"
+                  onClick={() => editorRef.current?.insertSnippet("## ", 0)}
+                  className="rounded border border-border bg-bg px-2 py-0.5 text-text hover:border-accent"
+                >
+                  H2
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    editorRef.current?.insertSnippet("```\n\n```", 4)
+                  }
+                  className="rounded border border-border bg-bg px-2 py-0.5 text-text hover:border-accent"
+                >
+                  Code
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editorRef.current?.insertSnippet("[[", 0)}
+                  className="rounded border border-border bg-bg px-2 py-0.5 text-text hover:border-accent"
+                  title="Link a note"
+                >
+                  [[Link]]
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    editorRef.current?.insertSnippet("[[prereq:", 0)
+                  }
+                  className="rounded border border-border bg-bg px-2 py-0.5 text-accent hover:border-accent"
+                  title="Add prerequisite for Reading Path"
+                >
+                  [[prereq:]]
+                </button>
+                <button
+                  type="button"
+                  onClick={() => editorRef.current?.insertSnippet("[[deep:", 0)}
+                  className="rounded border border-border bg-bg px-2 py-0.5 text-text hover:border-accent"
+                  title="Add deep-dive note"
+                >
+                  [[deep:]]
+                </button>
+              </div>
+              <span className="text-text-muted">
+                {wordStats.words} words &middot; {wordStats.lines} lines
+              </span>
             </div>
-          ) : (
-            <MarkdownEditor
-              value={contentMd}
-              onChange={(val) => {
-                setContentMd(val);
-                setDirty(true);
-              }}
-              onSave={() => handleSave(false)}
-              onSaveAndView={() => handleSave(true)}
-              onTogglePreview={handleTogglePreview}
-            />
           )}
+
+          <div
+            className={
+              viewMode === "split"
+                ? "grid grid-cols-1 divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0"
+                : ""
+            }
+          >
+            {viewMode !== "preview" && (
+              <div className="min-w-0 px-4">
+                <MarkdownEditor
+                  ref={editorRef}
+                  value={contentMd}
+                  onChange={(val) => {
+                    setContentMd(val);
+                    setDirty(true);
+                  }}
+                  onSave={() => handleSave(false)}
+                  onSaveAndView={() => handleSave(true)}
+                  onTogglePreview={handleTogglePreview}
+                />
+              </div>
+            )}
+
+            {viewMode !== "write" && (
+              <div className="min-h-[520px] min-w-0 overflow-y-auto px-5 py-4">
+                <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-text-muted">
+                  Live Preview
+                </p>
+                <h1 className="mb-4 font-sans text-2xl font-semibold tracking-tight text-text">
+                  {title || "Untitled note"}
+                </h1>
+                <NoteContent html={previewHtml} backlinks={[]} />
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Right: Metadata, Links found, Shortcuts, Revisions */}
-        <aside className="space-y-6 text-sm">
-          {/* Metadata panel */}
-          <section className="space-y-3">
+        {/* Right Inspector Sidebar */}
+        <aside className="space-y-5 text-sm">
+          {/* Organize Documentation First */}
+          <section className="space-y-3 rounded border border-border bg-bg p-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-mono text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Organize in Book
+              </h2>
+              <button
+                type="button"
+                onClick={() => setBookModalOpen(true)}
+                className="font-mono text-[11px] font-medium text-accent hover:underline"
+              >
+                + New Book
+              </button>
+            </div>
+
+            <div>
+              <label
+                htmlFor="note-category-filter"
+                className="mb-1 block font-mono text-xs text-text-muted"
+              >
+                Topic Category
+              </label>
+              <select
+                id="note-category-filter"
+                value={categoryFilterId}
+                onChange={(e) =>
+                  setCategoryFilterId(
+                    e.target.value === "all" ? "all" : Number(e.target.value)
+                  )
+                }
+                className="w-full rounded border border-border-strong bg-bg px-2.5 py-1.5 text-xs text-text focus:border-accent focus:outline-none"
+              >
+                <option value="all">All Categories</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="note-book"
+                className="mb-1 block font-mono text-xs text-text-muted"
+              >
+                Documentation Book
+              </label>
+              <select
+                id="note-book"
+                value={selectedBookId ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value ? Number(e.target.value) : null;
+                  setSelectedBookId(val);
+                  if (val !== null) {
+                    const picked = myBooks.find((b) => b.id === val);
+                    if (picked && noteId === null) {
+                      setSequence((picked.chapter_count || 0) + 1);
+                    }
+                  }
+                  setDirty(true);
+                }}
+                className="w-full rounded border border-border-strong bg-bg px-2.5 py-1.5 text-xs text-text focus:border-accent focus:outline-none"
+              >
+                <option value="">Standalone note (no book)</option>
+                {myBooks
+                  .filter(
+                    (b) =>
+                      categoryFilterId === "all" ||
+                      b.category.id === categoryFilterId ||
+                      b.id === selectedBookId
+                  )
+                  .map((b) => (
+                    <option key={b.id} value={b.id}>
+                      [{b.category.name}] {b.title} ({b.visibility})
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {selectedBookId !== null && (
+              <div>
+                <label
+                  htmlFor="note-sequence"
+                  className="mb-1 block font-mono text-xs text-text-muted"
+                >
+                  Chapter Sequence #
+                </label>
+                <input
+                  id="note-sequence"
+                  type="number"
+                  min={1}
+                  value={sequence}
+                  onChange={(e) => {
+                    setSequence(Math.max(1, Number(e.target.value) || 1));
+                    setDirty(true);
+                  }}
+                  className="w-24 rounded border border-border-strong bg-bg px-2.5 py-1 font-mono text-xs text-text focus:border-accent focus:outline-none"
+                />
+                {myBooks.find((b) => b.id === selectedBookId)?.visibility ===
+                  "private" && (
+                  <p className="mt-1.5 font-mono text-[11px] text-warn">
+                    This book is private — its chapters stay hidden until the book is public.
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* Metadata */}
+          <section className="space-y-3 rounded border border-border bg-bg p-4">
+            <h2 className="font-mono text-xs font-semibold uppercase tracking-wider text-text-muted">
+              Chapter Details
+            </h2>
+
             <div>
               <label
                 htmlFor="note-title"
@@ -493,67 +812,85 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
               <span className="mb-1.5 block font-mono text-xs text-text-muted">
                 Visibility
               </span>
-              <div className="flex items-center gap-4 font-mono text-xs">
-                <label className="flex cursor-pointer items-center gap-1.5">
-                  <input
-                    type="radio"
-                    name="visibility"
-                    value="private"
-                    checked={visibility === "private"}
-                    onChange={() => {
-                      setVisibility("private");
-                      setDirty(true);
-                    }}
-                  />
-                  <span>Private</span>
-                </label>
-                <label className="flex cursor-pointer items-center gap-1.5">
-                  <input
-                    type="radio"
-                    name="visibility"
-                    value="public"
-                    checked={visibility === "public"}
-                    onChange={() => {
-                      setVisibility("public");
-                      setDirty(true);
-                    }}
-                  />
-                  <span>Public</span>
-                </label>
+              <div className="grid grid-cols-2 rounded border border-border-strong bg-bg-subtle p-0.5 font-mono text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVisibility("private");
+                    setDirty(true);
+                  }}
+                  className={`rounded py-1 transition-colors ${
+                    visibility === "private"
+                      ? "bg-bg text-warn font-semibold shadow-sm"
+                      : "text-text-muted hover:text-text"
+                  }`}
+                >
+                  Private
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVisibility("public");
+                    setDirty(true);
+                  }}
+                  className={`rounded py-1 transition-colors ${
+                    visibility === "public"
+                      ? "bg-bg text-ok font-semibold shadow-sm"
+                      : "text-text-muted hover:text-text"
+                  }`}
+                >
+                  Public
+                </button>
               </div>
             </div>
           </section>
 
-          {/* Links found panel (T5.5 + T5.8) */}
-          <section className="border-t border-border pt-4">
+          {/* Links Found + Cycle Warning */}
+          <section className="rounded border border-border bg-bg p-4">
             <h2 className="mb-2 font-mono text-xs font-semibold uppercase tracking-wider text-text-muted">
               Links found ({linksFound.length})
             </h2>
             {linksFound.length === 0 ? (
               <p className="font-mono text-xs text-text-muted">
-                Use [[Title]] or [[prereq:Title]]
+                Type <code className="text-text">[[</code> to autocomplete your
+                notes or add <code className="text-text">[[prereq:Title]]</code>.
               </p>
             ) : (
-              <ul className="space-y-1.5 font-mono text-xs">
+              <ul className="space-y-2 font-mono text-xs">
                 {linksFound.map((link, idx) => (
                   <li
                     key={`${link.link_type}-${link.target_ref}-${idx}`}
-                    className="flex items-center justify-between gap-2"
+                    className="flex items-center justify-between gap-2 rounded bg-bg-subtle px-2 py-1.5"
                   >
                     <span className="truncate text-text">
                       <span className="text-text-muted">{link.link_type}</span>{" "}
                       {link.target_ref}
                     </span>
-                    <span
-                      className={
-                        link.status === "resolved"
-                          ? "text-ok"
-                          : link.status === "private"
-                          ? "text-warn"
-                          : "text-text-muted"
-                      }
-                    >
-                      {link.status}
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      <span
+                        className={
+                          link.status === "resolved"
+                            ? "text-ok"
+                            : link.status === "private"
+                            ? "text-warn"
+                            : "text-text-muted"
+                        }
+                      >
+                        {link.status}
+                      </span>
+                      {link.status === "missing" &&
+                        !link.target_ref.includes("/") && (
+                          <Link
+                            href={`/new?title=${encodeURIComponent(
+                              link.target_ref
+                            )}`}
+                            target="_blank"
+                            className="rounded border border-border px-1 text-[10px] text-accent hover:border-accent hover:no-underline"
+                            title={`Create "${link.target_ref}" in new tab`}
+                          >
+                            +
+                          </Link>
+                        )}
                     </span>
                   </li>
                 ))}
@@ -561,7 +898,7 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
             )}
 
             {cycleWarnings.length > 0 && (
-              <div className="mt-2 space-y-1 font-mono text-xs text-warn">
+              <div className="mt-3 rounded border border-warn/40 bg-bg-subtle p-2.5 font-mono text-xs text-warn">
                 {cycleWarnings.map((w, i) => (
                   <p key={i}>{w}</p>
                 ))}
@@ -569,8 +906,8 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
             )}
           </section>
 
-          {/* Keyboard shortcuts table (T5.9 / DESIGN.md 7.4.1) */}
-          <section className="border-t border-border pt-4">
+          {/* Keyboard Shortcuts */}
+          <section className="rounded border border-border bg-bg p-4">
             <h2 className="mb-2 font-mono text-xs font-semibold uppercase tracking-wider text-text-muted">
               Shortcuts
             </h2>
@@ -589,22 +926,22 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
                 <tr>
                   <td className="py-1 text-text">Ctrl/Cmd+P</td>
                   <td className="py-1 text-right text-text-muted">
-                    Toggle preview
+                    Cycle preview
                   </td>
                 </tr>
                 <tr>
                   <td className="py-1 text-text">[[</td>
                   <td className="py-1 text-right text-text-muted">
-                    Link autocomplete
+                    Autocomplete
                   </td>
                 </tr>
               </tbody>
             </table>
           </section>
 
-          {/* Revisions list (T5.10) */}
+          {/* Revisions */}
           {noteId !== null && (
-            <section className="border-t border-border pt-4">
+            <section className="rounded border border-border bg-bg p-4">
               <h2 className="mb-2 font-mono text-xs font-semibold uppercase tracking-wider text-text-muted">
                 Revisions ({revisions.length})
               </h2>
@@ -613,7 +950,7 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
                   No revisions yet
                 </p>
               ) : (
-                <ul className="max-h-40 space-y-1 overflow-y-auto font-mono text-xs">
+                <ul className="max-h-36 space-y-1 overflow-y-auto font-mono text-xs">
                   {revisions.map((rev) => (
                     <li key={rev.id}>
                       <button
@@ -630,9 +967,8 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
             </section>
           )}
 
-          {/* Delete button for existing note */}
           {noteId !== null && (
-            <section className="border-t border-border pt-4">
+            <div className="px-1">
               <button
                 type="button"
                 onClick={handleDelete}
@@ -640,12 +976,12 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
               >
                 Delete note
               </button>
-            </section>
+            </div>
           )}
         </aside>
       </div>
 
-      {/* Revision viewer modal */}
+      {/* Revision Viewer Modal */}
       {viewingRevision && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -686,6 +1022,32 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
           </div>
         </div>
       )}
+      <CreateBookModal
+        open={bookModalOpen}
+        categories={categories}
+        defaultCategoryId={categoryFilterId === "all" ? null : categoryFilterId}
+        onClose={() => setBookModalOpen(false)}
+        onCreated={(createdBook, createdCategory) => {
+          if (
+            createdCategory &&
+            !categories.some((c) => c.id === createdCategory.id)
+          ) {
+            setCategories((prev) =>
+              [...prev, createdCategory].sort((a, b) =>
+                a.name.localeCompare(b.name)
+              )
+            );
+          }
+          setMyBooks((prev) => [createdBook, ...prev]);
+          setCategoryFilterId(createdBook.category.id);
+          setSelectedBookId(createdBook.id);
+          if (noteId === null) {
+            setSequence(1);
+            setVisibility(createdBook.visibility);
+          }
+          setDirty(true);
+        }}
+      />
     </div>
   );
 }

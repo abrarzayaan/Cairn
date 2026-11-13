@@ -8,8 +8,15 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from apps.accounts.models import User
 from apps.moderation.models import Report
-from apps.moderation.services import ban_user, hide_note, unban_user, unhide_note
-from apps.notes.models import Note, NoteRevision, Tag
+from apps.moderation.services import (
+    ban_user,
+    hide_book,
+    hide_note,
+    unban_user,
+    unhide_book,
+    unhide_note,
+)
+from apps.notes.models import Book, Category, Note, NoteRevision, Tag
 
 
 class CairnAdminSite(OTPAdminSite):
@@ -229,6 +236,74 @@ class TagAdmin(admin.ModelAdmin):
         return obj._usage_count
 
 
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug", "books_count", "created_at")
+    search_fields = ("name", "slug")
+    readonly_fields = ("created_at",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(_books_count=Count("books"))
+
+    @admin.display(ordering="_books_count", description="Books")
+    def books_count(self, obj):
+        return obj._books_count
+
+
+class BookAdmin(admin.ModelAdmin):
+    list_display = ("title", "category", "author", "visibility", "moderation", "updated_at")
+    list_filter = ("visibility", "moderation", "category", "updated_at")
+    search_fields = ("title", "slug", "author__username", "category__name")
+    readonly_fields = ("created_at", "updated_at")
+    actions = ("action_hide_books", "action_unhide_books")
+
+    def get_fields(self, request, obj=None):
+        fields = [
+            "author",
+            "category",
+            "title",
+            "slug",
+            "visibility",
+            "moderation",
+            "moderation_note",
+            "created_at",
+            "updated_at",
+        ]
+        # Never expose private book details in admin
+        if obj is None or obj.visibility == "public":
+            fields.insert(4, "description")
+        return fields
+
+    @admin.action(description="Hide selected books (with reason)")
+    def action_hide_books(self, request, queryset):
+        def apply_hide(qs, reason):
+            count = 0
+            for book in qs:
+                hide_book(book, reason)
+                _log_admin_change(request, book, f"Hid book: {reason}")
+                count += 1
+            return count
+
+        return _handle_reason_action(
+            self,
+            request,
+            queryset,
+            action_name="action_hide_books",
+            title="Hide selected books",
+            description="Hidden books and all of their chapters return 404 to everyone except the author.",
+            submit_label="Hide books",
+            on_apply=apply_hide,
+        )
+
+    @admin.action(description="Unhide selected books")
+    def action_unhide_books(self, request, queryset):
+        count = 0
+        for book in queryset:
+            unhide_book(book)
+            _log_admin_change(request, book, "Unhid book")
+            count += 1
+        self.message_user(request, f"Unhid {count} book(s).", level=messages.SUCCESS)
+
+
 class NoteRevisionAdmin(admin.ModelAdmin):
     list_display = ("id", "note", "created_at")
     readonly_fields = ("note", "content_md", "created_at")
@@ -244,6 +319,8 @@ class NoteRevisionAdmin(admin.ModelAdmin):
 
 
 cairn_admin_site.register(User, UserAdmin)
+cairn_admin_site.register(Category, CategoryAdmin)
+cairn_admin_site.register(Book, BookAdmin)
 cairn_admin_site.register(Note, NoteAdmin)
 cairn_admin_site.register(Report, ReportAdmin)
 cairn_admin_site.register(Tag, TagAdmin)

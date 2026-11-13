@@ -70,10 +70,12 @@ Stack: **Next.js** (Frontend) + **FastAPI** (JSON API) + **Django** (ORM, Admin,
 4. Returns updated note + detected links.
 
 ### 3.3 Search (`GET /api/v1/search?q=closure`)
-1. Router calls `search.services.search(viewer, q, filters)`.
-2. Query builds: `(visibility = public AND not hidden) OR author = viewer`.
-3. Ranking: `ts_rank` on the weighted `search_vector` plus a trigram similarity boost on titles.
-4. Returns max 8 (palette) or paginated (page).
+1. Router calls `search.services.search_notes(viewer, q, filters)`.
+2. For global discovery (`scope=all`), query uses `published_notes_q()` / `published_books_q()`: `(visibility = 'public' AND is_published = TRUE AND moderation = 'ok' AND NOT author.is_banned)`. Public-but-unpublished docs are excluded from global search.
+3. For personal workspace (`scope=mine`), query filters by `author = viewer` (returns `private`, `public`, and `published`).
+4. Global user/profile search matches `username`/`bio` **and** authors whose `published` books or notes match the searched topic.
+5. Ranking: `ts_rank` on the weighted `search_vector` plus a trigram similarity boost on titles.
+6. Returns max 8 (palette) or paginated (page).
 
 ### 3.4 Reading path (`GET /u/rahim/closures/path`)
 See section 7.
@@ -174,12 +176,56 @@ CREATE UNIQUE INDEX users_username_lower_idx ON users (lower(username));
 
 Future-ready: `alias VARCHAR(40) NULL UNIQUE` can be added later for anonymous mode without breaking anything.
 
-### 6.2 `notes`
+### 6.1.1 `categories` (User-scoped desk shelves)
+
+```sql
+CREATE TABLE categories (
+  id          BIGSERIAL PRIMARY KEY,
+  author_id   BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name        VARCHAR(60) NOT NULL,
+  slug        VARCHAR(70) NOT NULL,
+  description VARCHAR(200) NOT NULL DEFAULT '',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (author_id, slug)
+);
+CREATE UNIQUE INDEX categories_author_name_lower_idx ON categories (author_id, lower(name));
+CREATE INDEX categories_author_idx ON categories (author_id, name);
+```
+
+### 6.1.2 `books` (Documentation / Books)
+
+```sql
+CREATE TABLE books (
+  id              BIGSERIAL PRIMARY KEY,
+  author_id       BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  category_id     BIGINT NOT NULL REFERENCES categories(id) ON DELETE PROTECT,
+  title           VARCHAR(120) NOT NULL,
+  slug            VARCHAR(140) NOT NULL,
+  description     VARCHAR(400) NOT NULL DEFAULT '',
+  visibility      VARCHAR(10) NOT NULL DEFAULT 'private'
+                  CHECK (visibility IN ('public','private')),
+  is_published    BOOLEAN NOT NULL DEFAULT FALSE,
+  moderation      VARCHAR(10) NOT NULL DEFAULT 'ok'
+                  CHECK (moderation IN ('ok','hidden')),
+  moderation_note TEXT NOT NULL DEFAULT '',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (author_id, slug),
+  CHECK (visibility = 'public' OR is_published = FALSE)
+);
+CREATE INDEX books_author_idx ON books (author_id, updated_at DESC);
+CREATE INDEX books_published_idx ON books (updated_at DESC)
+  WHERE visibility = 'public' AND is_published = TRUE AND moderation = 'ok';
+```
+
+### 6.2 `notes` (Chapters & Standalone Docs)
 
 ```sql
 CREATE TABLE notes (
   id              BIGSERIAL PRIMARY KEY,
   author_id       BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  book_id         BIGINT NULL REFERENCES books(id) ON DELETE SET NULL,
+  sequence        INT NOT NULL DEFAULT 1,
   title           VARCHAR(120) NOT NULL,
   slug            VARCHAR(140) NOT NULL,
   content_md      TEXT NOT NULL DEFAULT '',
@@ -187,6 +233,7 @@ CREATE TABLE notes (
   summary         VARCHAR(220) NOT NULL DEFAULT '',-- plain-text excerpt for previews/meta
   visibility      VARCHAR(10) NOT NULL DEFAULT 'private'
                   CHECK (visibility IN ('public','private')),
+  is_published    BOOLEAN NOT NULL DEFAULT FALSE,
   moderation      VARCHAR(10) NOT NULL DEFAULT 'ok'
                   CHECK (moderation IN ('ok','hidden')),
   moderation_note TEXT NOT NULL DEFAULT '',
@@ -196,13 +243,16 @@ CREATE TABLE notes (
                     setweight(to_tsvector('simple', coalesce(title,'')), 'A') ||
                     setweight(to_tsvector('simple', coalesce(content_md,'')), 'B')
                   ) STORED,
-  UNIQUE (author_id, slug)
+  UNIQUE (author_id, slug),
+  CHECK (visibility = 'public' OR is_published = FALSE)
 );
 CREATE INDEX notes_search_idx    ON notes USING GIN (search_vector);
 CREATE INDEX notes_title_trgm    ON notes USING GIN (title gin_trgm_ops);
 CREATE INDEX notes_author_idx    ON notes (author_id, updated_at DESC);
 CREATE INDEX notes_public_idx    ON notes (updated_at DESC)
   WHERE visibility = 'public' AND moderation = 'ok';
+CREATE INDEX notes_published_idx ON notes (updated_at DESC)
+  WHERE visibility = 'public' AND is_published = TRUE AND moderation = 'ok';
 CREATE UNIQUE INDEX notes_author_title_lower_idx ON notes (author_id, lower(title));
 ```
 
@@ -367,19 +417,26 @@ Complexity is trivial at this scale. If it ever becomes a bottleneck, use a recu
 ### 7.5 Search query (sketch)
 
 ```sql
-SELECT n.id, n.title, n.slug, u.username, n.visibility,
+-- Global search (scope = 'all'): published documents only
+SELECT n.id, n.title, n.slug, u.username, n.visibility, n.is_published,
        ts_rank(n.search_vector, q) * 2 + similarity(n.title, :raw) AS score
 FROM notes n
-JOIN users u ON u.id = n.author_id,
+JOIN users u ON u.id = n.author_id
+LEFT JOIN books b ON b.id = n.book_id,
      websearch_to_tsquery('simple', :raw) q
 WHERE (n.search_vector @@ q OR n.title % :raw)
-  AND ( (n.visibility = 'public' AND n.moderation = 'ok' AND NOT u.is_banned)
-        OR n.author_id = :viewer_id )
+  AND n.visibility = 'public'
+  AND n.is_published = TRUE
+  AND n.moderation = 'ok'
+  AND NOT u.is_banned
+  AND (b.id IS NULL OR (b.visibility = 'public' AND b.moderation = 'ok'))
 ORDER BY score DESC, n.updated_at DESC
 LIMIT :limit;
 ```
 
-In code, the visibility predicate is built by **one shared function** (`visible_notes_q(viewer)`) used by every query. Never rewrite it elsewhere.
+In code, visibility and discovery predicates live in shared functions:
+- `visible_notes_q(viewer)` / `visible_books_q(viewer)` — direct read access, profile desk (`/u/<user>`), reading path, backlinks, and `scope=mine`.
+- `published_notes_q()` / `published_books_q()` — global discovery surfaces (`scope=all` global search, home hub published feeds, tag pages, sitemap). Never rewrite these predicates elsewhere.
 
 ### 7.6 Markdown pipeline
 
@@ -401,9 +458,21 @@ All JSON. Errors use `{ "error": { "code": "...", "message": "..." } }`.
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/search?q=&scope=&tag=&author=&limit=&offset=` | optional | Search palette and results |
-| GET | `/notes/mine` | required | Sidebar tree (id, title, slug, tag, visibility) |
-| POST | `/notes` | required | Create note |
+| GET | `/categories` | required (or `?username=`) | List personal categories with book counts (own desk, or another user's public/published categories) |
+| POST | `/categories` | required | Create a personal category on the user's desk |
+| PATCH | `/categories/{id}` | required (owner) | Rename or update personal category description |
+| DELETE | `/categories/{id}` | required (owner) | Delete an empty personal category (or reassign books) |
+| GET | `/books/mine` | required | List authenticated user's books |
+| POST | `/books` | required | Create a new Book/Document under a personal Category (supports `visibility`, `is_published`) |
+| GET | `/books/by-slug/{username}/{slug}` | optional | Book context / Table of Contents + ordered chapters |
+| PATCH | `/books/{id}` | required (owner) | Update book title, category, description, visibility, `is_published` |
+| DELETE | `/books/{id}` | required (owner) | Delete book (detaches or deletes chapters) |
+| POST | `/books/{id}/reorder` | required (owner) | Reorder chapters (`note_ids` list) |
+| GET | `/home` | optional | Recent **published** books/docs, global topics, and own personal desk/workspace |
+| GET | `/users/{username}/profile` | optional | Developer desk: bio, personal categories, public & published books/notes |
+| GET | `/search?q=&type=&category=&scope=&tag=&author=&limit=&offset=` | optional | Global search across **published** books/notes and matching author profiles (`scope=all`), or personal workspace (`scope=mine`) |
+| GET | `/notes/mine` | required | Sidebar tree (id, title, slug, book, sequence, tag, visibility) |
+| POST | `/notes` | required | Create note/chapter (supports `book_id`, `sequence`) |
 | GET | `/notes/{id}` | required (owner) | Load for editor |
 | PATCH | `/notes/{id}` | required (owner) | Save |
 | DELETE | `/notes/{id}` | required (owner) | Delete |
@@ -417,14 +486,15 @@ All JSON. Errors use `{ "error": { "code": "...", "message": "..." } }`.
 | POST | `/reports` | required | Report a public note |
 | GET | `/health` | none | Liveness |
 
-Django (HTML) routes:
+Frontend (Next.js) routes:
 
 | Path | View |
 |------|------|
-| `/` | Home |
-| `/login`, `/logout`, `/accounts/github/...` | allauth |
-| `/u/<username>/` | Profile |
-| `/u/<username>/<slug>/` | Note view |
+| `/` | Docs Hub & Workspace (Categories, Public Books, My Bookshelf) |
+| `/login`, `/logout`, `/accounts/github/...` | GitHub OAuth |
+| `/u/<username>/` | Developer Docs Profile (Books grouped by Category) |
+| `/u/<username>/books/<book>/` | Book Context / Sequential Table of Contents |
+| `/u/<username>/<slug>/` | Documentation Reader (Left Book TOC + Center Doc + Right "On this page") |
 | `/u/<username>/<slug>/path/` | Reading path |
 | `/u/<username>/<slug>/edit/` | Editor (owner) |
 | `/new/` | New note |

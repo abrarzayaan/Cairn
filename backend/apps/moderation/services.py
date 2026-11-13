@@ -4,7 +4,7 @@ from django.db import transaction
 
 from apps.accounts.models import User
 from apps.moderation.models import Report
-from apps.notes.models import Note
+from apps.notes.models import Book, Note
 
 VALID_REPORT_REASONS = {"spam", "abuse", "copyright", "other"}
 
@@ -60,6 +60,25 @@ def unhide_note(note: Note) -> Note:
     note.moderation_note = ""
     note.save(update_fields=["moderation", "moderation_note"])
     return note
+
+
+def hide_book(book: Book, reason: str) -> Book:
+    """Hide a book and its chapters from public surfaces with a moderation reason."""
+    clean_reason = (reason or "").strip()
+    if not clean_reason:
+        raise ValidationError("A reason is required to hide a book.")
+    book.moderation = "hidden"
+    book.moderation_note = clean_reason
+    book.save(update_fields=["moderation", "moderation_note"])
+    return book
+
+
+def unhide_book(book: Book) -> Book:
+    """Restore a hidden book to 'ok'."""
+    book.moderation = "ok"
+    book.moderation_note = ""
+    book.save(update_fields=["moderation", "moderation_note"])
+    return book
 
 
 def invalidate_user_sessions(user: User) -> int:

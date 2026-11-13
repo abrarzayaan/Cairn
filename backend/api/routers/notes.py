@@ -2,8 +2,10 @@ from django.core.exceptions import ValidationError
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from api.deps import get_current_user, require_user, verify_csrf
+from api.routers.books import serialize_book_summary, serialize_chapter_ref
 from api.schemas.notes import (
     BacklinkItem,
+    ChapterRefOut,
     NoteCreateIn,
     NoteDetailResponse,
     NoteListItem,
@@ -18,8 +20,10 @@ from api.schemas.notes import (
 )
 from apps.accounts.models import User
 from apps.notes.models import Note, NoteLink, NoteRevision
+from apps.notes.services.books import get_book_chapters
 from apps.notes.services.links import get_backlinks, resolve_wikilinks_html
 from apps.notes.services.notes import (
+    _UNSET,
     create_note,
     delete_note,
     get_visible_note,
@@ -35,6 +39,8 @@ def _serialize_note(
     note: Note,
     include_editor_meta: bool = False,
     include_moderation_note: bool = False,
+    viewer=None,
+    book_chapter_count: int | None = None,
 ) -> NoteOut:
     links_out: list[RenderLinkOut] = []
     cycle_warnings: list[str] = []
@@ -57,6 +63,17 @@ def _serialize_note(
         path_data = build_reading_path(note, note.author)
         cycle_warnings = [w for w in path_data.get("warnings", []) if "cycle" in w.lower()]
 
+    book_out = (
+        serialize_book_summary(
+            note.book,
+            viewer=viewer,
+            include_moderation_note=include_moderation_note,
+            chapter_count=book_chapter_count,
+        )
+        if note.book_id
+        else None
+    )
+
     return NoteOut(
         id=note.id,
         title=note.title,
@@ -68,6 +85,8 @@ def _serialize_note(
         moderation_note=note.moderation_note if include_moderation_note else "",
         tags=[t.name for t in note.tags.all()],
         author_username=note.author.username,
+        book=book_out,
+        sequence=note.sequence,
         created_at=note.created_at,
         updated_at=note.updated_at,
         links=links_out,
@@ -78,7 +97,12 @@ def _serialize_note(
 @router.get("/mine", response_model=list[NoteListItem])
 def list_my_notes(user: User = Depends(require_user)):
     """List notes authored by current user."""
-    notes = Note.objects.filter(author=user).prefetch_related("tags").order_by("-updated_at")
+    notes = (
+        Note.objects.filter(author=user)
+        .select_related("book", "book__category")
+        .prefetch_related("tags")
+        .order_by("-updated_at")
+    )
     return [
         NoteListItem(
             id=n.id,
@@ -86,6 +110,11 @@ def list_my_notes(user: User = Depends(require_user)):
             slug=n.slug,
             visibility=n.visibility,
             tags=[t.name for t in n.tags.all()],
+            book_id=n.book_id,
+            book_title=n.book.title if n.book else None,
+            book_slug=n.book.slug if n.book else None,
+            category_name=n.book.category.name if n.book else None,
+            sequence=n.sequence,
             updated_at=n.updated_at,
         )
         for n in notes
@@ -107,13 +136,15 @@ def post_note(
             tags=data.tags,
             visibility=data.visibility,
             custom_slug=data.slug,
+            book_id=data.book_id,
+            sequence=data.sequence,
         )
     except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": {"code": "validation_error", "message": str(exc)}},
         ) from exc
-    return _serialize_note(note, include_editor_meta=True)
+    return _serialize_note(note, include_editor_meta=True, viewer=user)
 
 
 @router.get("/by-slug/{username}/{slug}", response_model=NoteDetailResponse)
@@ -130,13 +161,38 @@ def get_note_by_slug(
             detail={"error": {"code": "not_found", "message": "Note not found"}},
         )
     is_owner = viewer is not None and viewer.id == note.author_id
-    serialized = _serialize_note(note, include_moderation_note=is_owner)
+    chapters_out: list[ChapterRefOut] = []
+    prev_chapter: ChapterRefOut | None = None
+    next_chapter: ChapterRefOut | None = None
+    book_chapter_count: int | None = None
+
+    if note.book_id:
+        book_chapters = get_book_chapters(viewer, note.book)
+        book_chapter_count = len(book_chapters)
+        chapters_out = [serialize_chapter_ref(c) for c in book_chapters]
+        for idx, ch in enumerate(book_chapters):
+            if ch.id == note.id:
+                if idx > 0:
+                    prev_chapter = chapters_out[idx - 1]
+                if idx + 1 < len(chapters_out):
+                    next_chapter = chapters_out[idx + 1]
+                break
+
+    serialized = _serialize_note(
+        note,
+        include_moderation_note=is_owner,
+        viewer=viewer,
+        book_chapter_count=book_chapter_count,
+    )
     serialized.content_html = resolve_wikilinks_html(note.content_html, note, viewer)
     direct_prereqs = [PathNodeOut(**p) for p in get_direct_prerequisites(note, viewer)]
     return NoteDetailResponse(
         note=serialized,
         redirected=redirected,
         direct_prereqs=direct_prereqs,
+        chapters=chapters_out,
+        prev_chapter=prev_chapter,
+        next_chapter=next_chapter,
     )
 
 
@@ -244,7 +300,7 @@ def get_note_for_edit(note_id: int, user: User = Depends(require_user)):
     try:
         note = (
             Note.objects.filter(id=note_id, author=user)
-            .select_related("author")
+            .select_related("author", "book", "book__category")
             .prefetch_related("tags")
             .get()
         )
@@ -253,7 +309,7 @@ def get_note_for_edit(note_id: int, user: User = Depends(require_user)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": {"code": "not_found", "message": "Note not found"}},
         ) from None
-    return _serialize_note(note, include_editor_meta=True)
+    return _serialize_note(note, include_editor_meta=True, viewer=user)
 
 
 @router.patch("/{note_id}", response_model=NoteOut)
@@ -273,6 +329,8 @@ def patch_note(
             tags=data.tags,
             visibility=data.visibility,
             custom_slug=data.slug,
+            book_id=data.book_id if "book_id" in data.model_fields_set else _UNSET,
+            sequence=data.sequence,
         )
     except Note.DoesNotExist:
         raise HTTPException(
@@ -284,7 +342,7 @@ def patch_note(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": {"code": "validation_error", "message": str(exc)}},
         ) from exc
-    return _serialize_note(note, include_editor_meta=True)
+    return _serialize_note(note, include_editor_meta=True, viewer=user)
 
 
 @router.get("/{note_id}/revisions", response_model=list[NoteRevisionItem])

@@ -53,14 +53,17 @@ Tick `[x]` only after you have verified it, not when you believe it is done.
 ## 3. Authorization (access control)
 
 - [ ] **[R]** Every note read, write, delete goes through a service that checks ownership or visibility
-- [ ] **[R]** Single function `visible_notes_q(viewer)` is used by every query that returns notes (pages, search, profile, backlinks, path, preview, sitemap, tag pages, export)
+- [ ] **[R]** Single function `visible_notes_q(viewer)` is used by every query that returns notes (pages, profile, backlinks, path, preview, export), and `published_notes_q()` / `published_books_q()` is used by every global discovery query (global search `scope=all`, home feed, tag pages, sitemap)
+- [ ] **[R]** Personal `Category` records are strictly scoped to `author`; non-owners cannot edit/delete another user's categories, and categories with only `private` books are never exposed on `/u/<user>`
+- [ ] **[R]** `private` notes/books can never have `is_published=True` (enforced in services and DB check constraint); switching `public/published → private` resets `is_published=False` and removes them from every surface immediately
+- [ ] **[R]** Unpublished `public` notes/books never appear in global search (`scope=all`), home feed, tag pages, or `sitemap.xml`
 - [ ] **[R]** Private and hidden notes return **404** for non-owners (never 403, never a different message)
 - [ ] **[R]** Revision endpoints are owner-only
 - [ ] **[R]** IDs in URLs/JSON are never trusted: always re-check the object belongs to the user
 - [ ] **[R]** Admin-only actions are not reachable through the public API
 - [ ] **[R]** Cross-author links only resolve to `public` + `ok` notes
 - [ ] **[R]** Banned user's public notes disappear from all surfaces
-- [ ] **[R]** Changing Public → Private removes the note from search, profile, backlinks, previews, and sitemap immediately
+- [ ] **[R]** Changing Public/Published → Private removes the note from search, profile, backlinks, previews, and sitemap immediately; unpublishing (`Published → Public`) removes it from global search, home feed, tag pages, and sitemap immediately
 
 ## 4. Private-leak test matrix (automated, in `tests/security/`)
 
@@ -90,6 +93,8 @@ For each surface, assert that B and anon learn nothing about `P` (not title, not
 | Public→Private flip of `Q` | n/a | Q disappears from all surfaces on next request |
 | Hidden by moderator | author sees notice | 404 for everyone else |
 | Banned author | n/a | all their notes gone from public surfaces |
+| Public (unpublished) `Q` in global search / home / tags / sitemap | shown in `scope=mine` | excluded from `scope=all` global search, home feed, tag pages, and sitemap; still visible on `/u/A/` and `/u/A/Q/` |
+| Personal category with only `P` (private) | visible in own desk | hidden from `/u/A/` and non-owner API calls (404 on edit/delete) |
 
 - [ ] **[R]** Matrix implemented as parametrized pytest and runs on every PR
 

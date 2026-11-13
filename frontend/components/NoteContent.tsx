@@ -90,6 +90,38 @@ export default function NoteContent({ html, backlinks }: NoteContentProps) {
     };
   }, [html]);
 
+  // Attach Copy button to every <pre> code block (T9.4)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const preBlocks = container.querySelectorAll("pre");
+    preBlocks.forEach((pre) => {
+      if (pre.querySelector(".code-copy-btn")) return;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "code-copy-btn";
+      btn.textContent = "Copy";
+      btn.setAttribute("aria-label", "Copy code block");
+
+      btn.addEventListener("click", async () => {
+        const codeEl = pre.querySelector("code") || pre;
+        const text = codeEl.textContent || "";
+        try {
+          await navigator.clipboard.writeText(text);
+          btn.textContent = "Copied";
+          setTimeout(() => {
+            btn.textContent = "Copy";
+          }, 1500);
+        } catch {
+          btn.textContent = "Error";
+        }
+      });
+
+      pre.appendChild(btn);
+    });
+  }, [html]);
+
   return (
     <div className="relative">
       {html ? (

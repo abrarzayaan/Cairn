@@ -14,6 +14,82 @@ class Tag(models.Model):
         return f"#{self.name}"
 
 
+class Category(models.Model):
+    name = models.CharField(max_length=60, unique=True)
+    slug = models.CharField(max_length=70, unique=True)
+    description = models.CharField(max_length=200, default="", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "categories"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Book(models.Model):
+    VISIBILITY_CHOICES = [
+        ("public", "Public"),
+        ("private", "Private"),
+    ]
+    MODERATION_CHOICES = [
+        ("ok", "OK"),
+        ("hidden", "Hidden"),
+    ]
+
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="books",
+    )
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.PROTECT,
+        related_name="books",
+    )
+    title = models.CharField(max_length=120)
+    slug = models.CharField(max_length=140)
+    description = models.CharField(max_length=400, default="", blank=True)
+    visibility = models.CharField(
+        max_length=10,
+        default="private",
+        choices=VISIBILITY_CHOICES,
+    )
+    moderation = models.CharField(
+        max_length=10,
+        default="ok",
+        choices=MODERATION_CHOICES,
+    )
+    moderation_note = models.TextField(default="", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "books"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["author", "slug"],
+                name="books_author_slug_unique",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(visibility__in=["public", "private"]),
+                name="books_visibility_check",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(moderation__in=["ok", "hidden"]),
+                name="books_moderation_check",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["author", "-updated_at"], name="books_author_idx"),
+            models.Index(fields=["category", "-updated_at"], name="books_category_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.title} (@{self.author.username})"
+
+
 class Note(models.Model):
     VISIBILITY_CHOICES = [
         ("public", "Public"),
@@ -29,6 +105,14 @@ class Note(models.Model):
         on_delete=models.CASCADE,
         related_name="notes",
     )
+    book = models.ForeignKey(
+        Book,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="notes",
+    )
+    sequence = models.PositiveIntegerField(default=1)
     title = models.CharField(max_length=120)
     slug = models.CharField(max_length=140)
     content_md = models.TextField(default="", blank=True)
@@ -79,6 +163,7 @@ class Note(models.Model):
         ]
         indexes = [
             models.Index(fields=["author", "-updated_at"], name="notes_author_idx"),
+            models.Index(fields=["book", "sequence", "id"], name="notes_book_seq_idx"),
             models.Index(
                 fields=["-updated_at"],
                 name="notes_public_idx",

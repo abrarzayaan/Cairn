@@ -1,13 +1,16 @@
 import re
+from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Max, Q
 from django.utils.text import slugify
 from selectolax.parser import HTMLParser
 
 from apps.notes.markdown import render_markdown
-from apps.notes.models import Note, NoteRevision, NoteTag, SlugHistory, Tag
+from apps.notes.models import Book, Note, NoteRevision, NoteTag, SlugHistory, Tag
+
+_UNSET: Any = object()
 
 
 def _extract_summary(content_html: str) -> str:
@@ -21,17 +24,38 @@ def _extract_summary(content_html: str) -> str:
 TAG_REGEX = re.compile(r"^[a-z0-9-]+$")
 
 
+def visible_books_q(viewer) -> Q:
+    """Single source of truth for book visibility across all queries.
+
+    A book is visible if:
+    1. It is public, moderation is 'ok', and its author is not banned, OR
+    2. The viewer is authenticated and is the author of the book.
+    """
+    public_q = Q(
+        visibility="public",
+        moderation="ok",
+        author__is_banned=False,
+    )
+    if viewer and viewer.is_authenticated:
+        return public_q | Q(author_id=viewer.id)
+    return public_q
+
+
 def visible_notes_q(viewer) -> Q:
     """Single source of truth for note visibility across all queries.
 
     A note is visible if:
-    1. It is public, moderation is 'ok', and its author is not banned, OR
+    1. It is public, moderation is 'ok', its author is not banned, AND
+       (if assigned to a book) that book is public and moderation is 'ok', OR
     2. The viewer is authenticated and is the author of the note.
     """
     public_q = Q(
         visibility="public",
         moderation="ok",
         author__is_banned=False,
+    ) & (
+        Q(book__isnull=True)
+        | Q(book__visibility="public", book__moderation="ok")
     )
     if viewer and viewer.is_authenticated:
         return public_q | Q(author_id=viewer.id)
@@ -98,8 +122,10 @@ def create_note(
     tags: list[str] | None = None,
     visibility: str = "private",
     custom_slug: str | None = None,
+    book_id: int | None = None,
+    sequence: int | None = None,
 ) -> Note:
-    """Create a new note with slug and initial revision."""
+    """Create a new note with slug, optional book/sequence, and initial revision."""
     title_clean = title.strip()
     if not title_clean or len(title_clean) > 120:
         raise ValidationError("Title is required and must be 120 characters or fewer.")
@@ -109,6 +135,15 @@ def create_note(
 
     if visibility not in ("public", "private"):
         raise ValidationError("Visibility must be 'public' or 'private'.")
+
+    if sequence is not None and sequence < 1:
+        raise ValidationError("Sequence must be 1 or greater.")
+
+    book = None
+    if book_id is not None:
+        book = Book.objects.select_related("author", "category").filter(id=book_id, author=author).first()
+        if not book:
+            raise ValidationError("Book not found or not owned by you.")
 
     if Note.objects.filter(author=author, title__iexact=title_clean).exists():
         raise ValidationError("A note with this title already exists.")
@@ -120,8 +155,18 @@ def create_note(
     with transaction.atomic():
         from apps.notes.services.links import resolve_pending_links_for, sync_note_links
 
+        if sequence is not None:
+            resolved_seq = sequence
+        elif book is not None:
+            max_seq = Note.objects.filter(book=book).aggregate(m=Max("sequence"))["m"] or 0
+            resolved_seq = max_seq + 1
+        else:
+            resolved_seq = 1
+
         note = Note.objects.create(
             author=author,
+            book=book,
+            sequence=resolved_seq,
             title=title_clean,
             slug=slug,
             content_md=content_md,
@@ -154,14 +199,48 @@ def update_note(
     tags: list[str] | None = None,
     visibility: str | None = None,
     custom_slug: str | None = None,
+    book_id: Any = _UNSET,
+    sequence: int | None = None,
 ) -> Note:
     """Update note fields, slug history if slug changes, and revision if content changes."""
-    note = Note.objects.select_for_update().get(id=note_id, author=author)
+    note = (
+        Note.objects.select_for_update()
+        .select_related("author", "book", "book__category")
+        .get(id=note_id, author=author)
+    )
+
+    if sequence is not None and sequence < 1:
+        raise ValidationError("Sequence must be 1 or greater.")
 
     with transaction.atomic():
         from apps.notes.services.links import resolve_pending_links_for, sync_note_links
 
         extracted_links = None
+        if book_id is not _UNSET:
+            if book_id is None:
+                note.book = None
+            else:
+                target_book = (
+                    Book.objects.select_related("author", "category")
+                    .filter(id=book_id, author=author)
+                    .first()
+                )
+                if not target_book:
+                    raise ValidationError("Book not found or not owned by you.")
+                book_changed = note.book_id != target_book.id
+                note.book = target_book
+                if book_changed and sequence is None:
+                    max_seq = (
+                        Note.objects.filter(book=target_book)
+                        .exclude(id=note.id)
+                        .aggregate(m=Max("sequence"))["m"]
+                        or 0
+                    )
+                    note.sequence = max_seq + 1
+
+        if sequence is not None:
+            note.sequence = sequence
+
         if title is not None:
             title_clean = title.strip()
             if not title_clean or len(title_clean) > 120:
@@ -240,7 +319,7 @@ def get_visible_note(viewer, username: str, slug: str) -> tuple[Note | None, boo
     note = (
         Note.objects.filter(visible_notes_q(viewer))
         .filter(author__username__iexact=username, slug=slug)
-        .select_related("author")
+        .select_related("author", "book", "book__category")
         .prefetch_related("tags")
         .first()
     )
@@ -250,7 +329,7 @@ def get_visible_note(viewer, username: str, slug: str) -> tuple[Note | None, boo
     # 2. Check slug history
     history = (
         SlugHistory.objects.filter(author__username__iexact=username, old_slug=slug)
-        .select_related("note", "note__author")
+        .select_related("note", "note__author", "note__book", "note__book__category")
         .first()
     )
     if history and history.note:

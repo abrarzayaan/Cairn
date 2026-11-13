@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { EditorState, Compartment } from "@codemirror/state";
 import { EditorView, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -12,6 +12,10 @@ import {
 } from "@codemirror/autocomplete";
 import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
 import { fetchTitleSuggestions } from "@/lib/api";
+
+export interface MarkdownEditorHandle {
+  insertSnippet: (snippet: string, cursorBackOffset?: number) => void;
+}
 
 interface MarkdownEditorProps {
   value: string;
@@ -114,18 +118,36 @@ const editorTheme = EditorView.theme({
   },
 });
 
-export default function MarkdownEditor({
-  value,
-  onChange,
-  onSave,
-  onSaveAndView,
-  onTogglePreview,
-  readOnly = false,
-  placeholder = "# Title\n\nStart writing in Markdown. Use [[Note Title]] or [[prereq:Note Title]] to link...",
-}: MarkdownEditorProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const viewRef = useRef<EditorView | null>(null);
-  const readOnlyCompartment = useRef(new Compartment());
+const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
+  function MarkdownEditor(
+    {
+      value,
+      onChange,
+      onSave,
+      onSaveAndView,
+      onTogglePreview,
+      readOnly = false,
+      placeholder = "# Title\n\nStart writing in Markdown. Use [[Note Title]] or [[prereq:Note Title]] to link...",
+    },
+    ref
+  ) {
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const viewRef = useRef<EditorView | null>(null);
+    const readOnlyCompartment = useRef(new Compartment());
+
+    useImperativeHandle(ref, () => ({
+      insertSnippet(snippet: string, cursorBackOffset = 0) {
+        const view = viewRef.current;
+        if (!view) return;
+        const { from, to } = view.state.selection.main;
+        const nextPos = from + snippet.length - cursorBackOffset;
+        view.dispatch({
+          changes: { from, to, insert: snippet },
+          selection: { anchor: nextPos },
+        });
+        view.focus();
+      },
+    }));
 
   // Keep latest callbacks in refs to avoid recreating the EditorView
   const callbacksRef = useRef({
@@ -234,4 +256,6 @@ export default function MarkdownEditor({
       aria-label="Markdown editor"
     />
   );
-}
+});
+
+export default MarkdownEditor;
