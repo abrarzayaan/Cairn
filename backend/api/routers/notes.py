@@ -31,7 +31,11 @@ from apps.notes.services.paths import build_reading_path, get_direct_prerequisit
 router = APIRouter(prefix="/notes", tags=["notes"])
 
 
-def _serialize_note(note: Note, include_editor_meta: bool = False) -> NoteOut:
+def _serialize_note(
+    note: Note,
+    include_editor_meta: bool = False,
+    include_moderation_note: bool = False,
+) -> NoteOut:
     links_out: list[RenderLinkOut] = []
     cycle_warnings: list[str] = []
     if include_editor_meta:
@@ -61,6 +65,7 @@ def _serialize_note(note: Note, include_editor_meta: bool = False) -> NoteOut:
         content_html=note.content_html,
         visibility=note.visibility,
         moderation=note.moderation,
+        moderation_note=note.moderation_note if include_moderation_note else "",
         tags=[t.name for t in note.tags.all()],
         author_username=note.author.username,
         created_at=note.created_at,
@@ -124,7 +129,8 @@ def get_note_by_slug(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": {"code": "not_found", "message": "Note not found"}},
         )
-    serialized = _serialize_note(note)
+    is_owner = viewer is not None and viewer.id == note.author_id
+    serialized = _serialize_note(note, include_moderation_note=is_owner)
     serialized.content_html = resolve_wikilinks_html(note.content_html, note, viewer)
     direct_prereqs = [PathNodeOut(**p) for p in get_direct_prerequisites(note, viewer)]
     return NoteDetailResponse(

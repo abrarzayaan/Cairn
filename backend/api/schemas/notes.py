@@ -33,6 +33,7 @@ class NoteOut(BaseModel):
     content_html: str = ""
     visibility: str
     moderation: str
+    moderation_note: str = ""
     tags: list[str] = []
     author_username: str
     created_at: datetime

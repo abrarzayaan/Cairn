@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Metadata } from "next";
 import NoteContent from "@/components/NoteContent";
 import NoteOwnerActions from "@/components/NoteOwnerActions";
+import ReportButton from "@/components/ReportButton";
 
 interface PageProps {
   params: Promise<{
@@ -105,6 +106,17 @@ export default async function NotePage({ params }: PageProps) {
         </div>
       </header>
 
+      {note.moderation === "hidden" && (
+        <div className="mb-6 rounded border border-warn bg-bg-subtle p-4 font-mono text-xs text-warn">
+          <p className="font-semibold">
+            This note has been hidden by a moderator and is not visible to others.
+          </p>
+          {note.moderation_note && (
+            <p className="mt-1 text-text-muted">Reason: {note.moderation_note}</p>
+          )}
+        </div>
+      )}
+
       {directPrereqs.length > 0 && (
         <aside className="mb-8 rounded-md border border-border bg-bg-subtle p-4">
           <div className="mb-2 flex items-center justify-between">
@@ -150,6 +162,12 @@ export default async function NotePage({ params }: PageProps) {
       )}
 
       <NoteContent html={note.content_html} backlinks={backlinks} />
+
+      {note.visibility === "public" && (
+        <footer className="mt-8 flex items-center justify-end border-t border-border pt-4">
+          <ReportButton noteId={note.id} authorUsername={note.author_username} />
+        </footer>
+      )}
     </article>
   );
 }

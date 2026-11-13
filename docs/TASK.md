@@ -136,15 +136,15 @@ Legend: **P** = priority (M must, S should, C could)
 
 ## M8. Moderation and admin panel
 
-- [ ] T8.1 `Report` model + `POST /reports` + Report button/form on public notes (M)
-- [ ] T8.2 Django admin registration for User, Note, Report, Tag, NoteRevision with list/filter config (M)
-- [ ] T8.3 Admin actions: hide/unhide note (reason form), ban/unban user (reason form), delete note (M)
-- [ ] T8.4 Hidden note: 404 to others, notice to author (S)
-- [ ] T8.5 Banned user: sessions invalidated, public notes hidden from all surfaces (M)
-- [ ] T8.6 Secret admin path from env (M)
-- [ ] T8.7 TOTP 2FA for staff (django-otp) (M)
-- [ ] T8.8 Admin CSS tweak: site title, fonts (C)
-- [ ] T8.9 Tests: hidden/banned excluded from every surface, non-staff cannot reach admin (M)
+- [x] T8.1 `Report` model + `POST /reports` + Report button/form on public notes (M)
+- [x] T8.2 Django admin registration for User, Note, Report, Tag, NoteRevision with list/filter config (M)
+- [x] T8.3 Admin actions: hide/unhide note (reason form), ban/unban user (reason form), delete note (M)
+- [x] T8.4 Hidden note: 404 to others, notice to author (S)
+- [x] T8.5 Banned user: sessions invalidated, public notes hidden from all surfaces (M)
+- [x] T8.6 Secret admin path from env (M)
+- [x] T8.7 TOTP 2FA for staff (django-otp) (M)
+- [x] T8.8 Admin CSS tweak: site title, fonts (C)
+- [x] T8.9 Tests: hidden/banned excluded from every surface, non-staff cannot reach admin (M)
 
 **Done when:** you can report a note from a second account and hide it from the admin panel, and it disappears everywhere.
 

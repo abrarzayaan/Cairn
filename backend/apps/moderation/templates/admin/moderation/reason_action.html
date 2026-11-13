@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<form method="post">
+  {% csrf_token %}
+  <p>{{ description }}</p>
+
+  <ul>
+    {% for obj in queryset %}
+      <li>{{ obj }}</li>
+      <input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk }}">
+    {% endfor %}
+  </ul>
+
+  <div style="margin: 16px 0;">
+    <label for="id_reason" style="display:block; font-weight:600; margin-bottom:6px;">
+      Reason (required):
+    </label>
+    <textarea id="id_reason" name="reason" rows="3" cols="60" required></textarea>
+  </div>
+
+  <input type="hidden" name="action" value="{{ action_name }}">
+  <input type="hidden" name="apply" value="1">
+  <button type="submit" class="default">{{ submit_label }}</button>
+  <a href="." class="button cancel-link" style="margin-left: 8px;">Cancel</a>
+</form>
+{% endblock %}
+
