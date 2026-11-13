@@ -109,12 +109,12 @@ Legend: **P** = priority (M must, S should, C could)
 
 ## M6. Search
 
-- [ ] T6.1 Search service using weighted `search_vector` + trigram on titles + shared visibility function (M)
-- [ ] T6.2 `GET /search` API with filters (tag, author) and pagination (M)
-- [ ] T6.3 Cmd/Ctrl+K palette (vanilla JS, accessible dialog, keyboard navigation) (M)
-- [ ] T6.4 Full search page `/search/` (M)
-- [ ] T6.5 Tag pages `/tags/<tag>/` (S)
-- [ ] T6.6 Tests: private never appears for others, own private appears for owner, hidden/banned excluded, typo match (M)
+- [x] T6.1 Search service using weighted `search_vector` + trigram on titles + shared visibility function (M)
+- [x] T6.2 `GET /search` API with filters (tag, author) and pagination (M)
+- [x] T6.3 Cmd/Ctrl+K palette (vanilla JS, accessible dialog, keyboard navigation) (M)
+- [x] T6.4 Full search page `/search/` (M)
+- [x] T6.5 Tag pages `/tags/<tag>/` (S)
+- [x] T6.6 Tests: private never appears for others, own private appears for owner, hidden/banned excluded, typo match (M)
 
 **Done when:** typing 3 letters finds the note; a second account cannot find your private notes by any query.
 

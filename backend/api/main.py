@@ -3,7 +3,7 @@ from django.db import connection
 from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
 
-from api.routers import notes, render, users
+from api.routers import notes, render, search, users
 
 api_app = FastAPI(
     title="Cairn API",
@@ -17,6 +17,7 @@ api_app = FastAPI(
 api_app.include_router(users.router, prefix="/api/v1")
 api_app.include_router(notes.router, prefix="/api/v1")
 api_app.include_router(render.router, prefix="/api/v1")
+api_app.include_router(search.router, prefix="/api/v1")
 
 
 @api_app.get("/api/v1/health")

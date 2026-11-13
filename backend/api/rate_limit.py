@@ -39,4 +39,5 @@ class SlidingWindowRateLimiter:
 
 
 render_rate_limiter = SlidingWindowRateLimiter(max_requests=30, window_seconds=60)
+search_rate_limiter = SlidingWindowRateLimiter(max_requests=30, window_seconds=60)
 

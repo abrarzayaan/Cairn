@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchMe, logoutUser, User } from "@/lib/api";
+import SearchPalette from "@/components/SearchPalette";
 
 export default function Navbar() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     fetchMe().then((res) => {
@@ -17,6 +19,17 @@ export default function Navbar() {
     });
   }, []);
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const handleLogout = async () => {
     await logoutUser();
     setUser(null);
@@ -24,12 +37,23 @@ export default function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 flex h-11 items-center justify-between border-b border-border bg-bg px-4">
-      <Link href="/" className="font-mono text-base font-semibold tracking-tight text-text hover:no-underline">
-        cairn
-      </Link>
+    <>
+      <header className="sticky top-0 z-40 flex h-11 items-center justify-between border-b border-border bg-bg px-4">
+        <div className="flex items-center gap-4">
+          <Link href="/" className="font-mono text-base font-semibold tracking-tight text-text hover:no-underline">
+            cairn
+          </Link>
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className="inline-flex h-7 items-center gap-2 rounded border border-border-strong bg-bg-subtle px-2.5 font-mono text-xs text-text-muted hover:text-text"
+          >
+            <span>Search</span>
+            <span className="text-[11px] opacity-75">Ctrl+K</span>
+          </button>
+        </div>
 
-      <nav className="flex items-center gap-4 text-sm" aria-label="Main Navigation">
+        <nav className="flex items-center gap-4 text-sm" aria-label="Main Navigation">
         {!loading && (
           <>
             {user ? (
@@ -60,8 +84,15 @@ export default function Navbar() {
             )}
           </>
         )}
-      </nav>
-    </header>
+        </nav>
+      </header>
+
+      <SearchPalette
+        currentUsername={user?.username}
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+      />
+    </>
   );
 }
 

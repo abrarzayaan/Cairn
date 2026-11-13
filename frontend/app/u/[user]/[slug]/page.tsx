@@ -91,9 +91,13 @@ export default async function NotePage({ params }: PageProps) {
               <span>&middot;</span>
               <div className="flex gap-2">
                 {note.tags.map((tag: string) => (
-                  <span key={tag} className="text-text-muted hover:text-accent">
+                  <Link
+                    key={tag}
+                    href={`/tags/${encodeURIComponent(tag)}`}
+                    className="text-text-muted hover:text-accent"
+                  >
                     #{tag}
-                  </span>
+                  </Link>
                 ))}
               </div>
             </>
