@@ -1,0 +1,578 @@
+# ARCHITECTURE: Devbook
+
+Stack: **Django** (web, ORM, admin, auth) + **FastAPI** (JSON API) + **PostgreSQL**. One codebase, one deployable service.
+
+---
+
+## 1. Key decisions
+
+| # | Decision | Reason |
+|---|----------|--------|
+| D1 | Django owns models, migrations, admin, sessions, HTML pages | Admin panel comes free; mature ORM and migrations |
+| D2 | FastAPI owns the JSON API under `/api/v1` | Fast, typed schemas (Pydantic), good for editor, search, previews |
+| D3 | FastAPI is **mounted inside** the Django ASGI app, same process | One deploy, shared auth cookie, no CORS |
+| D4 | FastAPI uses the **Django ORM** (no second ORM) | One source of truth for the schema |
+| D5 | Pages are **server-rendered** with Django templates | SEO for public notes, no SPA complexity, fast first paint |
+| D6 | Small vanilla JS modules for interactions; CodeMirror 6 bundled with esbuild | Keeps the frontend light and hand-built |
+| D7 | PostgreSQL full-text search + `pg_trgm` | No extra search server in V1 |
+| D8 | Business logic in **service modules**, called by both Django views and FastAPI routers | No duplicated rules, easy to test |
+| D9 | Session cookie auth (Django sessions) for both Django and FastAPI | One auth system |
+| D10 | GitHub OAuth only; GitHub numeric ID is the identity key | Verified developers, no passwords |
+
+## 2. System diagram
+
+```
+                     Browser
+                        |
+                     HTTPS
+                        |
+                +---------------+
+                |     Caddy     |   TLS, gzip, security headers
+                +-------+-------+
+                        |
+            +-----------+------------+
+            |  gunicorn + uvicorn    |
+            |  workers (ASGI)        |
+            |                        |
+            |  config.asgi           |
+            |   |-- /api/*  -> FastAPI app (api/)         
+            |   '-- /*      -> Django (pages, admin, auth)
+            |                        |
+            |  apps/*/services  <----+---- shared business logic
+            +-----------+------------+
+                        |
+              +---------+---------+
+              |                   |
+        PostgreSQL 16        Redis (optional)
+        (data + search)      (rate limits)
+```
+
+## 3. Request flows
+
+### 3.1 Read a public note (`GET /u/rahim/closures`)
+1. Django view calls `notes.services.get_visible_note(viewer, username, slug)`.
+2. Service checks visibility; not allowed → `Http404`.
+3. Loads `content_html` (pre-rendered at save time).
+4. Resolves wikilink placeholders for this viewer in one batched query (resolved / missing / private).
+5. Loads prerequisites ("Read first") and backlinks through services, filtered by viewer permission.
+6. Template renders. Public, non-personalised responses may be cached; anything with a signed-in user is `Cache-Control: private`.
+
+### 3.2 Save a note (`PATCH /api/v1/notes/{id}`)
+1. FastAPI dependency loads the Django session user and verifies the CSRF header.
+2. Router validates body with a Pydantic schema.
+3. Calls `notes.services.update_note(user, note_id, data)` inside `transaction.atomic()`:
+   - check ownership
+   - update fields, slug history if slug changed
+   - render Markdown → sanitized HTML, store `content_html`
+   - parse links, replace `note_links` rows
+   - resolve pending links pointing to this note's title/slug
+   - create a `note_revisions` row if content changed
+4. Returns updated note + detected links.
+
+### 3.3 Search (`GET /api/v1/search?q=closure`)
+1. Router calls `search.services.search(viewer, q, filters)`.
+2. Query builds: `(visibility = public AND not hidden) OR author = viewer`.
+3. Ranking: `ts_rank` on the weighted `search_vector` plus a trigram similarity boost on titles.
+4. Returns max 8 (palette) or paginated (page).
+
+### 3.4 Reading path (`GET /u/rahim/closures/path`)
+See section 7.
+
+## 4. Folder structure
+
+```
+devbook/
+├── backend/
+│   ├── manage.py
+│   ├── config/
+│   │   ├── settings/
+│   │   │   ├── base.py
+│   │   │   ├── dev.py
+│   │   │   └── prod.py
+│   │   ├── urls.py
+│   │   ├── asgi.py              # mounts FastAPI at /api
+│   │   └── wsgi.py              # not used in prod, kept for tools
+│   ├── apps/
+│   │   ├── accounts/
+│   │   │   ├── models.py        # User
+│   │   │   ├── admin.py
+│   │   │   ├── adapters.py      # allauth hooks
+│   │   │   ├── views.py         # settings, export, delete
+│   │   │   └── services.py
+│   │   ├── notes/
+│   │   │   ├── models.py        # Note, Tag, NoteLink, NoteRevision, SlugHistory
+│   │   │   ├── admin.py
+│   │   │   ├── views.py         # HTML pages
+│   │   │   ├── urls.py
+│   │   │   ├── services/
+│   │   │   │   ├── notes.py     # create/update/delete/get_visible
+│   │   │   │   ├── links.py     # parse, resolve, backlinks
+│   │   │   │   ├── paths.py     # reading path
+│   │   │   │   ├── search.py
+│   │   │   │   └── export.py
+│   │   │   ├── markdown/
+│   │   │   │   ├── renderer.py  # markdown-it-py + plugins
+│   │   │   │   ├── wikilinks.py # [[...]] rule
+│   │   │   │   └── sanitize.py  # nh3 allow-list
+│   │   │   └── templatetags/
+│   │   ├── moderation/
+│   │   │   ├── models.py        # Report
+│   │   │   ├── admin.py
+│   │   │   └── services.py
+│   │   └── core/                # home, sitemap, robots, error views, middleware
+│   ├── api/                     # FastAPI
+│   │   ├── main.py              # FastAPI() app, router includes, exception handlers
+│   │   ├── deps.py              # current_user, csrf, rate limit
+│   │   ├── routers/
+│   │   │   ├── notes.py
+│   │   │   ├── search.py
+│   │   │   ├── users.py
+│   │   │   └── reports.py
+│   │   └── schemas/             # Pydantic models
+│   ├── templates/
+│   │   ├── base.html
+│   │   ├── home.html
+│   │   ├── notes/ (view, edit, path, tag, search)
+│   │   ├── accounts/ (profile, settings)
+│   │   └── errors/ (404, 500)
+│   ├── static/
+│   │   ├── css/ (tokens.css, base.css, layout.css, note.css, editor.css, ...)
+│   │   ├── js/  (palette.js, hover-preview.js, editor-boot.js, ...)
+│   │   └── fonts/
+│   └── tests/
+│       ├── unit/
+│       ├── integration/
+│       └── security/            # visibility / leak tests
+├── frontend/                    # only the editor bundle build
+│   ├── package.json
+│   └── src/editor.js            # CodeMirror 6, esbuild → backend/static/js/editor.bundle.js
+├── docker/
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   └── Caddyfile
+├── docs/                        # these .md files
+├── .env.example
+├── pyproject.toml
+└── README.md
+```
+
+## 5. Django + FastAPI integration
+
+`config/asgi.py`:
+
+```python
+import os
+from django.core.asgi import get_asgi_application
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.prod")
+django_app = get_asgi_application()  # must run before importing models
+
+from api.main import api_app  # FastAPI app; imports Django models safely now
+
+
+async def application(scope, receive, send):
+    if scope["type"] in ("http", "websocket") and scope["path"].startswith("/api/"):
+        await api_app(scope, receive, send)
+    else:
+        await django_app(scope, receive, send)
+```
+
+Rules:
+- FastAPI endpoints are plain `def` (not `async def`). FastAPI runs them in a threadpool, so the sync Django ORM is safe. Do not call the ORM from `async def` without `sync_to_async`.
+- Auth dependency reads the `sessionid` cookie, loads the session with Django's session engine, and returns the `User` or `None`.
+- Mutating endpoints (`POST/PATCH/DELETE`) require header `X-CSRFToken` matching Django's CSRF cookie. The dependency validates it.
+- API docs (`/api/docs`) enabled only in dev.
+
+## 6. Data model
+
+Django models are the source of truth. SQL below is the target schema.
+
+### 6.1 `users`
+
+```sql
+CREATE TABLE users (
+  id            BIGSERIAL PRIMARY KEY,
+  github_id     BIGINT UNIQUE NOT NULL,
+  username      VARCHAR(39) UNIQUE NOT NULL,   -- GitHub login, lowercase compare
+  bio           VARCHAR(280) NOT NULL DEFAULT '',
+  is_banned     BOOLEAN NOT NULL DEFAULT FALSE,
+  banned_reason TEXT NOT NULL DEFAULT '',
+  is_staff      BOOLEAN NOT NULL DEFAULT FALSE,
+  is_superuser  BOOLEAN NOT NULL DEFAULT FALSE,
+  is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+  password      VARCHAR(128) NOT NULL DEFAULT '', -- unusable for normal users; staff use it with TOTP
+  last_login    TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX users_username_lower_idx ON users (lower(username));
+```
+
+Future-ready: `alias VARCHAR(40) NULL UNIQUE` can be added later for anonymous mode without breaking anything.
+
+### 6.2 `notes`
+
+```sql
+CREATE TABLE notes (
+  id              BIGSERIAL PRIMARY KEY,
+  author_id       BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title           VARCHAR(120) NOT NULL,
+  slug            VARCHAR(140) NOT NULL,
+  content_md      TEXT NOT NULL DEFAULT '',
+  content_html    TEXT NOT NULL DEFAULT '',        -- sanitized, with wikilink placeholders
+  summary         VARCHAR(220) NOT NULL DEFAULT '',-- plain-text excerpt for previews/meta
+  visibility      VARCHAR(10) NOT NULL DEFAULT 'private'
+                  CHECK (visibility IN ('public','private')),
+  moderation      VARCHAR(10) NOT NULL DEFAULT 'ok'
+                  CHECK (moderation IN ('ok','hidden')),
+  moderation_note TEXT NOT NULL DEFAULT '',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  search_vector   TSVECTOR GENERATED ALWAYS AS (
+                    setweight(to_tsvector('simple', coalesce(title,'')), 'A') ||
+                    setweight(to_tsvector('simple', coalesce(content_md,'')), 'B')
+                  ) STORED,
+  UNIQUE (author_id, slug)
+);
+CREATE INDEX notes_search_idx    ON notes USING GIN (search_vector);
+CREATE INDEX notes_title_trgm    ON notes USING GIN (title gin_trgm_ops);
+CREATE INDEX notes_author_idx    ON notes (author_id, updated_at DESC);
+CREATE INDEX notes_public_idx    ON notes (updated_at DESC)
+  WHERE visibility = 'public' AND moderation = 'ok';
+CREATE UNIQUE INDEX notes_author_title_lower_idx ON notes (author_id, lower(title));
+```
+
+Requires extensions: `pg_trgm`.
+
+Future-ready: columns such as `mastery`, `next_review_at` live in a separate `note_progress` table later, not here.
+
+### 6.3 `tags` and `note_tags`
+
+```sql
+CREATE TABLE tags (
+  id    BIGSERIAL PRIMARY KEY,
+  name  VARCHAR(30) UNIQUE NOT NULL            -- lowercase, a-z0-9-
+);
+CREATE TABLE note_tags (
+  note_id BIGINT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+  tag_id  BIGINT NOT NULL REFERENCES tags(id)  ON DELETE CASCADE,
+  position SMALLINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (note_id, tag_id)
+);
+CREATE INDEX note_tags_tag_idx ON note_tags (tag_id);
+```
+
+### 6.4 `note_links` (the knowledge graph)
+
+```sql
+CREATE TABLE note_links (
+  id         BIGSERIAL PRIMARY KEY,
+  source_id  BIGINT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+  target_id  BIGINT REFERENCES notes(id) ON DELETE SET NULL,  -- NULL = pending/missing
+  target_ref VARCHAR(200) NOT NULL,        -- raw text from [[...]] e.g. "Scope" or "sara/closures"
+  link_type  VARCHAR(10) NOT NULL DEFAULT 'related'
+             CHECK (link_type IN ('related','prereq','deep')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (source_id, target_ref, link_type)
+);
+CREATE INDEX note_links_target_idx ON note_links (target_id, link_type);
+CREATE INDEX note_links_ref_idx    ON note_links (lower(target_ref)) WHERE target_id IS NULL;
+```
+
+- `source` → `target` with type `prereq` means: **source requires target** first.
+- `ON DELETE SET NULL`: if a target is deleted, the link becomes "missing" again, and stays recoverable.
+
+### 6.5 `note_revisions`
+
+```sql
+CREATE TABLE note_revisions (
+  id         BIGSERIAL PRIMARY KEY,
+  note_id    BIGINT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+  title      VARCHAR(120) NOT NULL,
+  content_md TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX note_revisions_note_idx ON note_revisions (note_id, created_at DESC);
+```
+
+- Append-only (no update/delete through the app, except cascade on note delete).
+- Limit: keep the latest 100 per note, prune older ones in a background command.
+- Phase 3 heatmap reads `created_at` from this table (grouped by day, joined through notes.author_id).
+
+### 6.6 `slug_history`
+
+```sql
+CREATE TABLE slug_history (
+  id        BIGSERIAL PRIMARY KEY,
+  note_id   BIGINT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+  old_slug  VARCHAR(140) NOT NULL,
+  author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (author_id, old_slug)
+);
+```
+
+### 6.7 `reports`
+
+```sql
+CREATE TABLE reports (
+  id          BIGSERIAL PRIMARY KEY,
+  note_id     BIGINT REFERENCES notes(id) ON DELETE SET NULL,
+  reporter_id BIGINT REFERENCES users(id) ON DELETE SET NULL,  -- NULL if visitor; see below
+  reason      VARCHAR(12) NOT NULL CHECK (reason IN ('spam','abuse','copyright','other')),
+  details     VARCHAR(500) NOT NULL DEFAULT '',
+  status      VARCHAR(10) NOT NULL DEFAULT 'open'
+              CHECK (status IN ('open','actioned','dismissed')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  handled_by  BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  handled_at  TIMESTAMPTZ
+);
+CREATE INDEX reports_status_idx ON reports (status, created_at);
+```
+
+V1: only signed-in users can report (reduces spam), so `reporter_id` is expected non-null.
+
+### 6.8 Framework tables
+
+`django_session`, `django_admin_log` (admin action audit), allauth tables (`socialaccount_*`), django-otp tables. Not redefined here.
+
+### 6.9 ER overview
+
+```
+users 1---* notes 1---* note_revisions
+              | *---* tags   (via note_tags)
+              | 1---* note_links *---1 notes (target)
+              | 1---* slug_history
+              | 1---* reports *---1 users (reporter)
+```
+
+## 7. Core algorithms
+
+### 7.1 Link syntax (parser)
+
+Inside Markdown inline text, outside code spans/blocks:
+
+```
+[[Scope]]                 related, target by title/slug (same author)
+[[prereq:Scope]]          prerequisite
+[[deep:Event Loop]]       deep dive
+[[Scope|how scope works]] custom label
+[[sara/closures]]         another author's public note (username/slug)
+```
+
+Regex (simplified): `\[\[(?:(prereq|deep):)?([^\]\|]{1,200})(?:\|([^\]]{1,100}))?\]\]`
+
+Parser returns `[(type, target_ref, label, span)]`. Done as a markdown-it inline rule so code blocks are skipped automatically.
+
+### 7.2 Link resolution
+
+For `target_ref`:
+1. Contains `/` → `username/slug` → note with `author.username = username AND slug = slug AND visibility = public AND moderation = ok`. (Cross-author only to public notes.)
+2. Else → author's note where `lower(title) = lower(ref)`; if none, `slug = slugify(ref)`.
+3. Not found → `target_id = NULL` (pending).
+
+On note create/rename/slug change: `UPDATE note_links SET target_id = :id WHERE target_id IS NULL AND lower(target_ref) IN (lower(:title), :slug) AND source.author_id = :author` (same-author refs only; cross-author refs resolve on the source's next save or by a periodic job).
+
+### 7.3 Render-time link state
+
+`content_html` stores placeholders: `<a class="wl" data-ref="Scope" data-type="prereq">Scope</a>`.
+At view time, one batched query loads the page's `note_links` + target visibility, then a single HTML pass (selectolax) sets `href`, class `wl-ok | wl-missing | wl-private`, and replaces private text with "Private note". Reason: visibility can change after the note was saved, so it must be computed at view time, per viewer.
+
+### 7.4 Reading path
+
+Input: root note `R`, viewer `V`. Output: ordered nodes + warnings.
+
+```
+1. BFS from R along note_links where link_type = 'prereq' (source → target).
+   - batch: load all edges for the current frontier in one query per level
+   - limits: depth <= 20, nodes <= 200
+2. For each discovered target:
+   - if viewer can see it → real node, continue expanding
+   - if not (private/hidden) → placeholder node "Private note", DO NOT expand
+   - if target_id IS NULL (missing) → placeholder node "Not written yet"
+3. Build a graph: edge A → B means "A requires B".
+4. Topological sort (Kahn) so that required notes come first.
+   Ties: alphabetical by title (deterministic).
+5. If nodes remain after Kahn → cycle. Return the sorted part, plus warning
+   "Cycle: A → B → A" (found with DFS on the leftover).
+6. Output list with R last.
+```
+
+Complexity is trivial at this scale. If it ever becomes a bottleneck, use a recursive CTE.
+
+### 7.5 Search query (sketch)
+
+```sql
+SELECT n.id, n.title, n.slug, u.username, n.visibility,
+       ts_rank(n.search_vector, q) * 2 + similarity(n.title, :raw) AS score
+FROM notes n
+JOIN users u ON u.id = n.author_id,
+     websearch_to_tsquery('simple', :raw) q
+WHERE (n.search_vector @@ q OR n.title % :raw)
+  AND ( (n.visibility = 'public' AND n.moderation = 'ok' AND NOT u.is_banned)
+        OR n.author_id = :viewer_id )
+ORDER BY score DESC, n.updated_at DESC
+LIMIT :limit;
+```
+
+In code, the visibility predicate is built by **one shared function** (`visible_notes_q(viewer)`) used by every query. Never rewrite it elsewhere.
+
+### 7.6 Markdown pipeline
+
+```
+content_md
+  → markdown-it-py (html=False, typographer off)
+       plugins: tables, footnotes, tasklists, wikilink rule, image-as-link rule
+  → Pygments highlight for fenced code (server-side, custom style)
+  → nh3 sanitize (allow-list tags/attrs, only http/https/mailto/#anchor URLs)
+  → add rel="noopener noreferrer nofollow ugc" target="_blank" to external links
+  → store as content_html
+```
+
+Image rule: `![alt](url)` → `<a class="ext-img" href="url">alt (image link)</a>`; never `<img>`.
+
+## 8. API (FastAPI, `/api/v1`)
+
+All JSON. Errors use `{ "error": { "code": "...", "message": "..." } }`.
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/search?q=&scope=&tag=&author=&limit=&offset=` | optional | Search palette and results |
+| GET | `/notes/mine` | required | Sidebar tree (id, title, slug, tag, visibility) |
+| POST | `/notes` | required | Create note |
+| GET | `/notes/{id}` | required (owner) | Load for editor |
+| PATCH | `/notes/{id}` | required (owner) | Save |
+| DELETE | `/notes/{id}` | required (owner) | Delete |
+| GET | `/notes/{id}/preview` | optional | Hover preview (title, summary, prereq count) |
+| GET | `/notes/{id}/backlinks` | optional | Backlinks visible to viewer |
+| GET | `/notes/{id}/path` | optional | Reading path |
+| GET | `/notes/{id}/revisions` | required (owner) | Revision list |
+| GET | `/notes/{id}/revisions/{rid}` | required (owner) | One revision |
+| POST | `/render` | required | Markdown → HTML for editor preview (rate limited) |
+| GET | `/titles?q=` | required | Autocomplete for `[[` (own titles only) |
+| POST | `/reports` | required | Report a public note |
+| GET | `/health` | none | Liveness |
+
+Django (HTML) routes:
+
+| Path | View |
+|------|------|
+| `/` | Home |
+| `/login`, `/logout`, `/accounts/github/...` | allauth |
+| `/u/<username>/` | Profile |
+| `/u/<username>/<slug>/` | Note view |
+| `/u/<username>/<slug>/path/` | Reading path |
+| `/u/<username>/<slug>/edit/` | Editor (owner) |
+| `/new/` | New note |
+| `/tags/<tag>/` | Public notes by tag |
+| `/search/` | Full search page |
+| `/settings/` | Bio, export, delete |
+| `/sitemap.xml`, `/robots.txt` | SEO |
+| `/<ADMIN_PATH>/` | Django admin (secret path from env) |
+
+## 9. Admin panel (Django admin)
+
+| Model | List | Filters | Actions |
+|-------|------|---------|---------|
+| User | username, github_id, is_banned, created_at, notes count | banned, staff, date | Ban, Unban |
+| Note | title, author, visibility, moderation, updated_at | visibility, moderation, date | Hide, Unhide, Delete |
+| Report | note, reason, status, reporter, created_at | status, reason | Mark actioned, Dismiss, Hide note + action |
+| Tag | name, usage count | none | none |
+| NoteRevision | read-only | none | none |
+
+- Hide action requires a reason (intermediate admin form) saved to `moderation_note`.
+- Ban action requires a reason, sets `is_banned`, invalidates sessions.
+- Secret admin path from `ADMIN_PATH` env; staff login requires password **and** TOTP (django-otp).
+- Admin changes appear in `django_admin_log` automatically.
+- Staff accounts are created only with `manage.py createsuperuser`, never through OAuth.
+
+## 10. Authentication details
+
+- `django-allauth` with the GitHub provider.
+- Scope: `read:user` only. `SOCIALACCOUNT_STORE_TOKENS = False`.
+- Custom adapter:
+  - identity = `uid` (GitHub numeric ID)
+  - on first login: create user with `username = github login`
+  - on later login: update username if changed and unique, else keep the old one
+  - refuse login if `is_banned`
+- Session: HTTP-only, `Secure`, `SameSite=Lax`, 14-day rolling expiry.
+- Logout is POST-only.
+
+## 11. Caching
+
+- Public note HTML pages for anonymous visitors: `Cache-Control: public, max-age=60` plus `Vary: Cookie`. Short TTL so visibility changes take effect within a minute, and **purge on visibility change** (if a CDN is added later).
+- Signed-in responses: `Cache-Control: private, no-store` on note pages.
+- Static assets: hashed filenames by WhiteNoise, `max-age=1 year, immutable`.
+- No Redis cache for page data in V1.
+
+## 12. Rate limiting
+
+Implemented in an API dependency and a Django middleware (Redis backend, fallback to in-memory for dev).
+
+| Action | Limit |
+|--------|-------|
+| Search | 30 / minute / user or IP |
+| Note write (create/update/delete) | 60 / minute / user |
+| Markdown render preview | 30 / minute / user |
+| Report | 5 / hour / user |
+| Global per IP | 300 / minute |
+
+## 13. Deployment
+
+`docker/docker-compose.yml` services: `web` (gunicorn with uvicorn workers), `db` (postgres:16), `redis` (optional), `caddy`.
+
+```
+gunicorn config.asgi:application -k uvicorn.workers.UvicornWorker -w 3 -b 0.0.0.0:8000
+```
+
+- Static: WhiteNoise.
+- Migrations run as a release step, not on every container start.
+- Hosting: one small VPS is enough for V1.
+- Backups: nightly `pg_dump` to off-server storage, retention 14 days, restore tested.
+- CI (GitHub Actions): ruff, tests, `pip-audit`, migration check (`makemigrations --check`).
+
+### Environment variables (`.env.example`)
+
+```
+DJANGO_SETTINGS_MODULE=config.settings.prod
+SECRET_KEY=
+DEBUG=false
+ALLOWED_HOSTS=
+CSRF_TRUSTED_ORIGINS=
+DATABASE_URL=postgres://...
+REDIS_URL=redis://redis:6379/0
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+ADMIN_PATH=change-me-long-random/
+SENTRY_DSN=
+```
+
+## 14. Observability
+
+- Structured JSON logs (request id, user id, path, status, duration). No note content in logs.
+- `/api/v1/health` checks DB connectivity.
+- Optional Sentry with PII scrubbing on.
+
+## 15. Testing strategy
+
+| Layer | Tool | What |
+|-------|------|------|
+| Unit | pytest | markdown rendering, link parsing, path algorithm, slugify |
+| Service | pytest-django | visibility rules, link resolution, revisions |
+| API | pytest + FastAPI TestClient | auth, CSRF, validation, rate limits |
+| Security | pytest | private-leak matrix (see SECURITY_CHECK.md) |
+| E2E | Playwright (few smoke tests) | login stub, write note, link, search, path |
+
+Minimum: every function in `services/` has tests. The private-leak matrix must pass before every merge to main.
+
+## 16. Extension points for the future
+
+| Future feature | Where it plugs in |
+|----------------|-------------------|
+| Heatmap / streak | Query `note_revisions` grouped by day |
+| Mastery / spaced repetition | New `note_progress(user_id, note_id, mastery, next_review_at)` |
+| Unlisted visibility | Extend `visibility` CHECK, add to `visible_notes_q` |
+| Alias / anonymous mode | Add `users.alias`; display layer picks alias vs username |
+| Q&A and ratings | New `questions`, `answers`, `ratings` apps; reuse `Report` |
+| Graph view | New endpoint over `note_links`, render with D3 |
+| Forks | `notes.forked_from_id` nullable FK |
+| AI | Separate service module, called from API only |
