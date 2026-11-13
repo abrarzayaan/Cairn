@@ -1,4 +1,3 @@
-from django.contrib.auth import get_user_model
 from django.contrib.sessions.backends.db import SessionStore
 from django.middleware.csrf import (
     CSRF_TOKEN_LENGTH,
@@ -8,7 +7,7 @@ from django.middleware.csrf import (
 )
 from fastapi import Cookie, Depends, HTTPException, Request, status
 
-User = get_user_model()
+from apps.accounts.models import User
 
 
 def get_current_user(sessionid: str | None = Cookie(None)) -> User | None:
