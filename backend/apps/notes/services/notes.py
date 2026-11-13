@@ -4,8 +4,19 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.utils.text import slugify
+from selectolax.parser import HTMLParser
 
+from apps.notes.markdown import render_markdown
 from apps.notes.models import Note, NoteRevision, NoteTag, SlugHistory, Tag
+
+
+def _extract_summary(content_html: str) -> str:
+    """Extract up to 200 chars of clean plain text from rendered HTML."""
+    if not content_html:
+        return ""
+    text = HTMLParser(content_html).text(separator=" ", strip=True)
+    collapsed = " ".join(text.split())
+    return collapsed[:200]
 
 TAG_REGEX = re.compile(r"^[a-z0-9-]+$")
 
@@ -103,13 +114,19 @@ def create_note(
         raise ValidationError("A note with this title already exists.")
 
     slug = generate_unique_slug(author, title_clean, custom_slug=custom_slug)
+    content_html, extracted_links = render_markdown(content_md)
+    summary = _extract_summary(content_html)
 
     with transaction.atomic():
+        from apps.notes.services.links import resolve_pending_links_for, sync_note_links
+
         note = Note.objects.create(
             author=author,
             title=title_clean,
             slug=slug,
             content_md=content_md,
+            content_html=content_html,
+            summary=summary,
             visibility=visibility,
         )
 
@@ -122,6 +139,9 @@ def create_note(
                 title=note.title,
                 content_md=content_md,
             )
+
+        sync_note_links(note, extracted_links)
+        resolve_pending_links_for(note)
 
     return note
 
@@ -139,6 +159,9 @@ def update_note(
     note = Note.objects.select_for_update().get(id=note_id, author=author)
 
     with transaction.atomic():
+        from apps.notes.services.links import resolve_pending_links_for, sync_note_links
+
+        extracted_links = None
         if title is not None:
             title_clean = title.strip()
             if not title_clean or len(title_clean) > 120:
@@ -174,15 +197,25 @@ def update_note(
         if content_md is not None:
             if len(content_md) > 100000:
                 raise ValidationError("Content must be 100,000 characters or fewer.")
-            if content_md != note.content_md:
-                NoteRevision.objects.create(
-                    note=note,
-                    title=note.title,
-                    content_md=content_md,
-                )
+            if content_md != note.content_md or not note.content_html:
+                if content_md != note.content_md:
+                    NoteRevision.objects.create(
+                        note=note,
+                        title=note.title,
+                        content_md=content_md,
+                    )
+                content_html, extracted_links = render_markdown(content_md)
                 note.content_md = content_md
+                note.content_html = content_html
+                note.summary = _extract_summary(content_html)
 
         note.save()
+
+        if extracted_links is not None:
+            sync_note_links(note, extracted_links)
+
+        if title is not None or custom_slug is not None or visibility is not None:
+            resolve_pending_links_for(note)
 
         if tags is not None:
             _sync_tags(note, tags)

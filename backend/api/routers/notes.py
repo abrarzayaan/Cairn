@@ -3,19 +3,23 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from api.deps import get_current_user, require_user, verify_csrf
 from api.schemas.notes import (
+    BacklinkItem,
     NoteCreateIn,
     NoteDetailResponse,
     NoteListItem,
     NoteOut,
+    NotePreviewOut,
     NoteUpdateIn,
 )
 from apps.accounts.models import User
-from apps.notes.models import Note
+from apps.notes.models import Note, NoteLink
+from apps.notes.services.links import get_backlinks, resolve_wikilinks_html
 from apps.notes.services.notes import (
     create_note,
     delete_note,
     get_visible_note,
     update_note,
+    visible_notes_q,
 )
 
 router = APIRouter(prefix="/notes", tags=["notes"])
@@ -91,7 +95,58 @@ def get_note_by_slug(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": {"code": "not_found", "message": "Note not found"}},
         )
-    return NoteDetailResponse(note=_serialize_note(note), redirected=redirected)
+    serialized = _serialize_note(note)
+    serialized.content_html = resolve_wikilinks_html(note.content_html, note, viewer)
+    return NoteDetailResponse(note=serialized, redirected=redirected)
+
+
+@router.get("/{note_id}/backlinks", response_model=list[BacklinkItem])
+def get_note_backlinks(
+    note_id: int,
+    viewer: User | None = Depends(get_current_user),
+):
+    """Return viewer-filtered backlinks pointing to this note."""
+    note = Note.objects.filter(visible_notes_q(viewer)).filter(id=note_id).first()
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "not_found", "message": "Note not found"}},
+        )
+    return [BacklinkItem(**item) for item in get_backlinks(note, viewer)]
+
+
+@router.get("/{note_id}/preview", response_model=NotePreviewOut)
+def get_note_preview(
+    note_id: int,
+    viewer: User | None = Depends(get_current_user),
+):
+    """Return hover preview data for a visible note."""
+    note = (
+        Note.objects.filter(visible_notes_q(viewer))
+        .filter(id=note_id)
+        .select_related("author")
+        .first()
+    )
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "not_found", "message": "Note not found"}},
+        )
+
+    prereq_count = NoteLink.objects.filter(
+        source=note,
+        link_type="prereq",
+        target__in=Note.objects.filter(visible_notes_q(viewer)),
+    ).count()
+
+    return NotePreviewOut(
+        id=note.id,
+        title=note.title,
+        slug=note.slug,
+        author_username=note.author.username,
+        summary=note.summary,
+        prereq_count=prereq_count,
+    )
 
 
 @router.get("/{note_id}", response_model=NoteOut)

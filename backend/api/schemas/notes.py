@@ -45,3 +45,35 @@ class NoteListItem(BaseModel):
 class NoteDetailResponse(BaseModel):
     note: NoteOut
     redirected: bool = False
+
+
+class BacklinkItem(BaseModel):
+    id: int
+    title: str
+    slug: str
+    author_username: str
+    link_type: str
+    summary: str = ""
+
+
+class NotePreviewOut(BaseModel):
+    id: int
+    title: str
+    slug: str
+    author_username: str
+    summary: str
+    prereq_count: int
+
+
+class RenderIn(BaseModel):
+    content_md: str = Field(default="", max_length=100000)
+
+
+class RenderLinkOut(BaseModel):
+    target_ref: str
+    link_type: str
+
+
+class RenderOut(BaseModel):
+    html: str
+    links: list[RenderLinkOut] = []

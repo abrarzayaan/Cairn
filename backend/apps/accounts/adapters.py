@@ -12,6 +12,10 @@ class CustomAccountAdapter(DefaultAccountAdapter):
 
 
 class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
+    def is_open_for_signup(self, request, sociallogin):
+        # Allow signup via GitHub OAuth even though normal email/password signup is closed
+        return sociallogin.account.provider == "github"
+
     def pre_social_login(self, request, sociallogin):
         if sociallogin.account.provider != "github":
             return

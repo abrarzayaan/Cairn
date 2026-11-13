@@ -59,18 +59,18 @@ Legend: **P** = priority (M must, S should, C could)
 
 ## M3. Markdown and linking
 
-- [ ] T3.1 Markdown renderer with markdown-it-py (tables, footnotes, task lists), raw HTML disabled (M)
-- [ ] T3.2 Wikilink inline rule with all syntaxes from FR-L1 (M)
-- [ ] T3.3 Image-as-link rule (no `<img>` ever) (M)
-- [ ] T3.4 Pygments highlighting with a custom restrained style (M)
-- [ ] T3.5 nh3 sanitizer allow-list; external links get `rel` and `target` (M)
-- [ ] T3.6 Link extraction on save → `note_links` rows (M)
-- [ ] T3.7 Link resolution rules + auto-resolve pending links on note create/rename (M)
-- [ ] T3.8 Render-time link states (ok / missing / private) with one batched query (M)
-- [ ] T3.9 Backlinks service (viewer-filtered) + API endpoint + display (M)
-- [ ] T3.10 Hover preview endpoint + JS module (S)
-- [ ] T3.11 `POST /render` for editor preview, rate limited (M)
-- [ ] T3.12 Tests: XSS payload corpus, wikilinks inside code blocks ignored, every link syntax, image rule, pending → resolved (M)
+- [x] T3.1 Markdown renderer with markdown-it-py (tables, footnotes, task lists), raw HTML disabled (M)
+- [x] T3.2 Wikilink inline rule with all syntaxes from FR-L1 (M)
+- [x] T3.3 Image-as-link rule (no `<img>` ever) (M)
+- [x] T3.4 Pygments highlighting with a custom restrained style (M)
+- [x] T3.5 nh3 sanitizer allow-list; external links get `rel` and `target` (M)
+- [x] T3.6 Link extraction on save → `note_links` rows (M)
+- [x] T3.7 Link resolution rules + auto-resolve pending links on note create/rename (M)
+- [x] T3.8 Render-time link states (ok / missing / private) with one batched query (M)
+- [x] T3.9 Backlinks service (viewer-filtered) + API endpoint + display (M)
+- [x] T3.10 Hover preview endpoint + JS module (S)
+- [x] T3.11 `POST /render` for editor preview, rate limited (M)
+- [x] T3.12 Tests: XSS payload corpus, wikilinks inside code blocks ignored, every link syntax, image rule, pending → resolved (M)
 
 **Done when:** a note with `[[prereq:Scope]]` renders a link; creating "Scope" afterwards turns the link from missing to active; XSS corpus test passes.
 

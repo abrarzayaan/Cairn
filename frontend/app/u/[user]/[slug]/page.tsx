@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { Metadata } from "next";
+import NoteContent from "@/components/NoteContent";
 
 interface PageProps {
   params: Promise<{
@@ -19,21 +21,20 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function NotePage({ params }: PageProps) {
   const { user, slug } = await params;
   const backendUrl = process.env.BACKEND_INTERNAL_URL || "http://127.0.0.1:8000";
+  const cookieStore = await cookies();
+  const cookieHeader = cookieStore.toString();
 
   let res;
   try {
     res = await fetch(`${backendUrl}/api/v1/notes/by-slug/${user}/${slug}`, {
       cache: "no-store",
+      headers: cookieHeader ? { cookie: cookieHeader } : undefined,
     });
   } catch {
     notFound();
   }
 
-  if (res.status === 404) {
-    notFound();
-  }
-
-  if (!res.ok) {
+  if (res.status === 404 || !res.ok) {
     notFound();
   }
 
@@ -43,6 +44,20 @@ export default async function NotePage({ params }: PageProps) {
   // Handle slug history redirect
   if (data.redirected && note.slug !== slug) {
     redirect(`/u/${user}/${note.slug}`);
+  }
+
+  // Fetch viewer-filtered backlinks
+  let backlinks = [];
+  try {
+    const blRes = await fetch(`${backendUrl}/api/v1/notes/${note.id}/backlinks`, {
+      cache: "no-store",
+      headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+    });
+    if (blRes.ok) {
+      backlinks = await blRes.json();
+    }
+  } catch {
+    // Backlinks fail gracefully
   }
 
   const isPrivate = note.visibility === "private";
@@ -83,13 +98,7 @@ export default async function NotePage({ params }: PageProps) {
         </div>
       </header>
 
-      {/* Note content (plain text content for M2, markdown rendered in M3) */}
-      <div className="whitespace-pre-wrap font-serif text-lg leading-relaxed text-text">
-        {note.content_md || (
-          <span className="italic text-text-muted">Empty note.</span>
-        )}
-      </div>
+      <NoteContent html={note.content_html} backlinks={backlinks} />
     </article>
   );
 }
-

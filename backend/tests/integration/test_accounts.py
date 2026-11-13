@@ -178,3 +178,40 @@ def test_auth_api_flow_authenticated(api_client, client):
     logout_res = api_client.post("/api/v1/auth/logout")
     assert logout_res.status_code == 200
     assert logout_res.json()["ok"] is True
+
+
+@pytest.mark.django_db
+def test_social_signup_open_even_when_regular_signup_closed(rf, adapter):
+    """GitHub OAuth signup succeeds even though CustomAccountAdapter closes normal signup."""
+    from allauth.core import context
+    from allauth.socialaccount.helpers import complete_social_login
+    from django.contrib.auth.models import AnonymousUser
+    from django.contrib.messages.middleware import MessageMiddleware
+    from django.contrib.sessions.middleware import SessionMiddleware
+
+    from apps.accounts.adapters import CustomAccountAdapter
+
+    req = rf.get("/accounts/github/login/callback/")
+    SessionMiddleware(lambda r: None).process_request(req)
+    req.session.save()
+    MessageMiddleware(lambda r: None).process_request(req)
+    req.user = AnonymousUser()
+
+    assert CustomAccountAdapter().is_open_for_signup(req) is False
+
+    sl = SocialLogin(
+        user=User(),
+        account=SocialAccount(
+            provider="github",
+            uid="909090",
+            extra_data={"login": "new_gh_user", "id": 909090},
+        ),
+    )
+    adapter.populate_user(req, sl, {"username": "new_gh_user"})
+    assert adapter.is_open_for_signup(req, sl) is True
+
+    with context.request_context(req):
+        res = complete_social_login(req, sl)
+
+    assert res.status_code == 302
+    assert User.objects.filter(github_id=909090, username="new_gh_user").exists()

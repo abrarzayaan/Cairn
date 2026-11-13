@@ -61,3 +61,175 @@ body {
   min-height: 100vh;
 }
 
+/* Cairn Markdown & Wikilink styles */
+.prose-cairn {
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.72;
+  color: var(--text);
+}
+
+.prose-cairn h1,
+.prose-cairn h2,
+.prose-cairn h3,
+.prose-cairn h4 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin-top: 1.75rem;
+  margin-bottom: 0.75rem;
+  color: var(--text);
+}
+
+.prose-cairn h1 { font-size: 1.75rem; }
+.prose-cairn h2 { font-size: 1.375rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
+.prose-cairn h3 { font-size: 1.125rem; }
+
+.prose-cairn p {
+  margin-bottom: 1rem;
+}
+
+.prose-cairn ul,
+.prose-cairn ol {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+}
+
+.prose-cairn ul { list-style-type: disc; }
+.prose-cairn ol { list-style-type: decimal; }
+
+.prose-cairn li.task-list-item {
+  list-style-type: none;
+  margin-left: -1.25rem;
+}
+
+.prose-cairn blockquote {
+  border-left: 3px solid var(--border-strong);
+  padding-left: 1rem;
+  color: var(--text-muted);
+  margin: 1rem 0;
+  font-style: italic;
+}
+
+.prose-cairn code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background-color: var(--bg-subtle);
+  padding: 0.15rem 0.35rem;
+  border-radius: 3px;
+}
+
+.prose-cairn .codehilite,
+.prose-cairn pre {
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.875rem 1rem;
+  overflow-x: auto;
+  margin: 1.25rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.prose-cairn pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+.prose-cairn table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  font-family: var(--font-sans);
+  font-size: 0.925rem;
+}
+
+.prose-cairn th,
+.prose-cairn td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.prose-cairn th {
+  background-color: var(--bg-subtle);
+  font-weight: 600;
+}
+
+.prose-cairn a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.prose-cairn a.wikilink--ok {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.prose-cairn a.wikilink--missing {
+  color: var(--text-muted);
+  text-decoration-style: dashed;
+  cursor: help;
+}
+
+.prose-cairn a.wikilink--private {
+  color: var(--warn);
+  text-decoration-style: dotted;
+  cursor: not-allowed;
+}
+
+.prose-cairn a.ext-img {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-strong);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  text-decoration: none;
+}
+
+.prose-cairn a.ext-img:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Pygments restrained tokens */
+.prose-cairn pre .c,
+.prose-cairn pre .c1,
+.prose-cairn pre .cm,
+.codehilite .c,
+.codehilite .c1,
+.codehilite .cm { color: #6e7387; font-style: italic; }
+.prose-cairn pre .k,
+.prose-cairn pre .kd,
+.prose-cairn pre .kn,
+.prose-cairn pre .kp,
+.prose-cairn pre .kr,
+.prose-cairn pre .kt,
+.codehilite .k,
+.codehilite .kd,
+.codehilite .kn,
+.codehilite .kp,
+.codehilite .kr,
+.codehilite .kt { color: var(--accent); font-weight: 600; }
+.prose-cairn pre .s,
+.prose-cairn pre .s1,
+.prose-cairn pre .s2,
+.prose-cairn pre .sb,
+.codehilite .s,
+.codehilite .s1,
+.codehilite .s2,
+.codehilite .sb { color: var(--ok); }
+.prose-cairn pre .nf,
+.prose-cairn pre .nc,
+.codehilite .nf,
+.codehilite .nc { color: #2563eb; font-weight: 500; }
+.prose-cairn pre .mi,
+.prose-cairn pre .mf,
+.prose-cairn pre .mh,
+.codehilite .mi,
+.codehilite .mf,
+.codehilite .mh { color: var(--warn); }
+
