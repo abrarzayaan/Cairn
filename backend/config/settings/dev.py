@@ -10,3 +10,4 @@ STORAGES["staticfiles"] = {
 
 # Allow swagger / redoc docs in dev
 ENABLE_API_DOCS = True
+

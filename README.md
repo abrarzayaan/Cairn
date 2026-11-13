@@ -24,3 +24,4 @@ Full project specifications and technical rules are available in the `docs/` dir
 ## Development Setup
 
 See `TASK.md` for current milestone progress.
+
