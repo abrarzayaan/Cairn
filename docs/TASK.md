@@ -245,3 +245,6 @@ Part-time, that is roughly 2.5 to 4 months. The shortest useful version for your
 - [ ] Teams and bootcamp workspaces
 - [ ] Paid plans, custom domains
 - [ ] Hiring layer (opt-in public profile for recruiters)
+
+
+#chacnges
