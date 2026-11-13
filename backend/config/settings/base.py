@@ -2,8 +2,15 @@ import os
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 REPO_DIR = BASE_DIR.parent
+
+# Load .env file from project root if present
+_env_file = REPO_DIR / ".env"
+if _env_file.exists():
+    load_dotenv(_env_file)
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "insecure-placeholder-key-for-building")
 DEBUG = False

@@ -92,3 +92,4 @@ export default async function NotePage({ params }: PageProps) {
     </article>
   );
 }
+
