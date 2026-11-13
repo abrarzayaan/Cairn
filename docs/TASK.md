@@ -42,16 +42,16 @@ Legend: **P** = priority (M must, S should, C could)
 
 ## M2. Notes core (CRUD + visibility)
 
-- [ ] T2.1 Models: `Note`, `Tag`, `NoteTag`, `NoteRevision`, `SlugHistory` + migrations, with indexes from ARCHITECTURE.md (M)
-- [ ] T2.2 `visible_notes_q(viewer)` function: the single source of the visibility rule (M)
-- [ ] T2.3 Services: `create_note`, `update_note`, `delete_note`, `get_visible_note`, slug generation and uniqueness (M)
-- [ ] T2.4 Revision creation on content change (M)
-- [ ] T2.5 Slug change → `SlugHistory` + redirect from old URL (S)
-- [ ] T2.6 API: `POST /notes`, `GET/PATCH/DELETE /notes/{id}`, `GET /notes/mine` with Pydantic schemas (M)
-- [ ] T2.7 Auth + CSRF dependency for FastAPI (session user, `X-CSRFToken`) (M)
-- [ ] T2.8 Basic note view page `/u/<user>/<slug>/` (plain text content for now) (M)
-- [ ] T2.9 Private note returns 404 to non-owner (M)
-- [ ] T2.10 Tests: ownership, visibility matrix for the note page and API, validation limits (M)
+- [x] T2.1 Models: `Note`, `Tag`, `NoteTag`, `NoteRevision`, `SlugHistory` + migrations, with indexes from ARCHITECTURE.md (M)
+- [x] T2.2 `visible_notes_q(viewer)` function: the single source of the visibility rule (M)
+- [x] T2.3 Services: `create_note`, `update_note`, `delete_note`, `get_visible_note`, slug generation and uniqueness (M)
+- [x] T2.4 Revision creation on content change (M)
+- [x] T2.5 Slug change → `SlugHistory` + redirect from old URL (S)
+- [x] T2.6 API: `POST /notes`, `GET/PATCH/DELETE /notes/{id}`, `GET /notes/mine` with Pydantic schemas (M)
+- [x] T2.7 Auth + CSRF dependency for FastAPI (session user, `X-CSRFToken`) (M)
+- [x] T2.8 Basic note view page `/u/<user>/<slug>/` (plain text content for now) (M)
+- [x] T2.9 Private note returns 404 to non-owner (M)
+- [x] T2.10 Tests: ownership, visibility matrix for the note page and API, validation limits (M)
 
 **Done when:** you can create, edit, delete a note through the API, toggle public/private, and another browser session gets 404 on the private one.
 
