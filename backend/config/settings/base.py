@@ -159,6 +159,7 @@ SESSION_SAVE_EVERY_REQUEST = True
 
 # Allauth / GitHub
 SOCIALACCOUNT_STORE_TOKENS = False
+SOCIALACCOUNT_LOGIN_ON_GET = True
 ACCOUNT_LOGIN_METHODS = {"username"}
 ACCOUNT_SIGNUP_FIELDS = ["username*"]
 ACCOUNT_USER_MODEL_EMAIL_FIELD = None
@@ -167,13 +168,13 @@ SOCIALACCOUNT_AUTO_SIGNUP = True
 ACCOUNT_ADAPTER = "apps.accounts.adapters.CustomAccountAdapter"
 SOCIALACCOUNT_ADAPTER = "apps.accounts.adapters.CustomSocialAccountAdapter"
 ACCOUNT_LOGOUT_ON_GET = False
-LOGIN_REDIRECT_URL = "/"
-LOGOUT_REDIRECT_URL = "/"
-ACCOUNT_LOGOUT_REDIRECT_URL = "/"
+LOGIN_REDIRECT_URL = os.environ.get("LOGIN_REDIRECT_URL", "http://localhost:3000/")
+LOGOUT_REDIRECT_URL = os.environ.get("LOGOUT_REDIRECT_URL", "http://localhost:3000/login")
+ACCOUNT_LOGOUT_REDIRECT_URL = LOGOUT_REDIRECT_URL
 
 # GitHub OAuth credentials
-GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
-GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
+GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "").strip()
+GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "").strip()
 
 SOCIALACCOUNT_PROVIDERS = {
     "github": {

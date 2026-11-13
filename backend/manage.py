@@ -26,6 +26,37 @@ def main():
         load_dotenv(env_path)
 
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.dev")
+
+    # If runserver is invoked, run Uvicorn ASGI so both Django and FastAPI are served
+    if len(sys.argv) > 1 and sys.argv[1] == "runserver":
+        host = "127.0.0.1"
+        port = "8000"
+        for arg in sys.argv[2:]:
+            if not arg.startswith("-"):
+                if ":" in arg:
+                    host, port = arg.split(":", 1)
+                elif arg.isdigit():
+                    port = arg
+                else:
+                    host = arg
+                break
+
+        uvicorn_bin = repo_dir / ".venv" / "Scripts" / "uvicorn.exe"
+        cmd = [
+            str(uvicorn_bin if uvicorn_bin.exists() else sys.executable),
+        ]
+        if not uvicorn_bin.exists():
+            cmd.extend(["-m", "uvicorn"])
+        cmd.extend([
+            "config.asgi:application",
+            "--host",
+            host,
+            "--port",
+            port,
+            "--reload",
+        ])
+        sys.exit(subprocess.call(cmd))
+
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
