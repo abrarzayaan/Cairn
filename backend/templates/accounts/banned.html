@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Account Suspended &middot; devbook{% endblock %}
+
+{% block content %}
+<div style="max-width: 480px; margin: 40px auto;">
+  <h1 style="font-size: var(--fs-h2); color: var(--danger); margin-bottom: 12px;">Account Suspended</h1>
+  <p style="color: var(--text-muted); margin-bottom: 16px;">Your account has been suspended by a moderator.</p>
+  {% if reason %}
+    <p style="color: var(--text); background: var(--bg-subtle); padding: 12px; border: 1px solid var(--border); font-size: var(--fs-sm); margin-bottom: 16px;">
+      Reason: {{ reason }}
+    </p>
+  {% endif %}
+  <p><a href="/">Return to home</a></p>
+</div>
+{% endblock %}

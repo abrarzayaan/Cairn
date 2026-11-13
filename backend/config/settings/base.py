@@ -157,13 +157,26 @@ ACCOUNT_SIGNUP_FIELDS = ["username*"]
 ACCOUNT_USER_MODEL_EMAIL_FIELD = None
 ACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_AUTO_SIGNUP = True
+ACCOUNT_ADAPTER = "apps.accounts.adapters.CustomAccountAdapter"
+SOCIALACCOUNT_ADAPTER = "apps.accounts.adapters.CustomSocialAccountAdapter"
+ACCOUNT_LOGOUT_ON_GET = False
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/"
+ACCOUNT_LOGOUT_REDIRECT_URL = "/"
+
+# GitHub OAuth credentials
+GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
+GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
+
 SOCIALACCOUNT_PROVIDERS = {
     "github": {
         "SCOPE": ["read:user"],
+        "APP": {
+            "client_id": GITHUB_CLIENT_ID,
+            "secret": GITHUB_CLIENT_SECRET,
+            "key": "",
+        },
     }
 }
-SOCIALACCOUNT_ADAPTER = "apps.accounts.adapters.CustomSocialAccountAdapter"
-LOGIN_REDIRECT_URL = "/"
-LOGOUT_REDIRECT_URL = "/"
 
 ADMIN_PATH = os.environ.get("ADMIN_PATH", "admin/").strip("/")

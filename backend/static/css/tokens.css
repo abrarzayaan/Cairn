@@ -1,0 +1,71 @@
+:root {
+  /* Light theme */
+  --bg: #FBFAF7;
+  --bg-subtle: #F3F1EB;
+  --bg-inset: #ECE9E1;
+  --border: #DDD9CF;
+  --border-strong: #BDB8AB;
+  --text: #1C1B19;
+  --text-muted: #6A665C;
+  --accent: #B4492A;
+  --accent-bg: #F5E6DF;
+  --ok: #2F6B3B;
+  --warn: #8F6200;
+  --danger: #A3281F;
+
+  /* Fonts */
+  --font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "Source Serif 4", Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+
+  /* Font sizes & line heights */
+  --fs-xs: 12px;
+  --lh-xs: 16px;
+  --fs-sm: 13px;
+  --lh-sm: 18px;
+  --fs-base: 14px;
+  --lh-base: 20px;
+  --fs-read: 17px;
+  --lh-read: 28px;
+  --fs-h3: 18px;
+  --lh-h3: 26px;
+  --fs-h2: 22px;
+  --lh-h2: 30px;
+  --fs-h1: 30px;
+  --lh-h1: 38px;
+
+  /* Controls */
+  --radius: 3px;
+}
+
+[data-theme="dark"] {
+  --bg: #161513;
+  --bg-subtle: #1E1D1A;
+  --bg-inset: #272521;
+  --border: #34322D;
+  --border-strong: #4B4841;
+  --text: #E8E5DC;
+  --text-muted: #9A9589;
+  --accent: #E38460;
+  --accent-bg: #33231D;
+  --ok: #6DB27B;
+  --warn: #D9A441;
+  --danger: #E0675D;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161513;
+    --bg-subtle: #1E1D1A;
+    --bg-inset: #272521;
+    --border: #34322D;
+    --border-strong: #4B4841;
+    --text: #E8E5DC;
+    --text-muted: #9A9589;
+    --accent: #E38460;
+    --accent-bg: #33231D;
+    --ok: #6DB27B;
+    --warn: #D9A441;
+    --danger: #E0675D;
+  }
+}

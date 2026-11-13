@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% load socialaccount %}
+
+{% block title %}Sign in &middot; devbook{% endblock %}
+
+{% block content %}
+<div style="max-width: 400px; margin: 40px auto; text-align: center;">
+  <h1 style="font-family: var(--font-mono); font-size: var(--fs-h1); font-weight: 600; margin-bottom: 8px;">devbook</h1>
+  <p style="color: var(--text-muted); font-size: var(--fs-base); margin-bottom: 24px;">Linked notes for developers.</p>
+
+  <a href="{% provider_login_url 'github' %}" class="btn btn-primary" style="width: 100%; height: 38px;">
+    Sign in with GitHub
+  </a>
+</div>
+{% endblock %}

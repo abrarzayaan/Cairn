@@ -27,14 +27,14 @@ Legend: **P** = priority (M must, S should, C could)
 
 ## M1. Accounts and GitHub login
 
-- [ ] T1.1 Custom `User` model (github_id, username, bio, is_banned) created **before** first migration (M)
-- [ ] T1.2 Register a GitHub OAuth app (dev + prod callback URLs) (M)
-- [ ] T1.3 Configure django-allauth GitHub provider, scope `read:user`, tokens not stored (M)
-- [ ] T1.4 Custom adapter: key on GitHub numeric ID, create/sync username, block banned users (M)
-- [ ] T1.5 Login page and logout (POST) (M)
-- [ ] T1.6 Session cookie settings (Secure, HttpOnly, SameSite=Lax) in prod settings (M)
-- [ ] T1.7 Settings page: edit bio (280 chars) (M)
-- [ ] T1.8 Tests: first login creates user, username sync, banned user refused (M)
+- [x] T1.1 Custom `User` model (github_id, username, bio, is_banned) created **before** first migration (M)
+- [x] T1.2 Register a GitHub OAuth app (dev + prod callback URLs) (M)
+- [x] T1.3 Configure django-allauth GitHub provider, scope `read:user`, tokens not stored (M)
+- [x] T1.4 Custom adapter: key on GitHub numeric ID, create/sync username, block banned users (M)
+- [x] T1.5 Login page and logout (POST) (M)
+- [x] T1.6 Session cookie settings (Secure, HttpOnly, SameSite=Lax) in prod settings (M)
+- [x] T1.7 Settings page: edit bio (280 chars) (M)
+- [x] T1.8 Tests: first login creates user, username sync, banned user refused (M)
 
 **Done when:** you can sign in with your real GitHub account locally and see your username in the top bar.
 
