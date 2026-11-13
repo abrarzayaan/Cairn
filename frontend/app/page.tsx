@@ -18,7 +18,7 @@ export default function HomePage() {
   return (
     <div className="mx-auto max-w-[680px] py-10">
       <h1 className="mb-3 font-mono text-3xl font-semibold tracking-tight text-text">
-        devbook
+        cairn
       </h1>
       <p className="mb-2 text-lg leading-relaxed text-text">
         Linked notes for developers.

@@ -26,7 +26,7 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 flex h-11 items-center justify-between border-b border-border bg-bg px-4">
       <Link href="/" className="font-mono text-base font-semibold tracking-tight text-text hover:no-underline">
-        devbook
+        cairn
       </Link>
 
       <nav className="flex items-center gap-4 text-sm" aria-label="Main Navigation">

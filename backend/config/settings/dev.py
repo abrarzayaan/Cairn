@@ -1,7 +1,7 @@
 from .base import *
 
 DEBUG = True
-SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-dev-key-devbook-development-only")
+SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-dev-key-cairn-development-only")
 
 # Use simple static files storage in dev to avoid manifest errors before collectstatic
 STORAGES["staticfiles"] = {

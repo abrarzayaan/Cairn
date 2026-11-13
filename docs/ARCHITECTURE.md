@@ -1,4 +1,4 @@
-# ARCHITECTURE: Devbook
+# ARCHITECTURE: Cairn
 
 Stack: **Next.js** (Frontend) + **FastAPI** (JSON API) + **Django** (ORM, Admin, Auth models) + **PostgreSQL**.
 
@@ -81,7 +81,7 @@ See section 7.
 ## 4. Folder structure
 
 ```
-devbook/
+cairn/
 ├── backend/
 │   ├── manage.py
 │   ├── config/

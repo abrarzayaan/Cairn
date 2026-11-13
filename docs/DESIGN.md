@@ -1,4 +1,4 @@
-# DESIGN: Devbook
+# DESIGN: Cairn
 
 The goal of this design: a developer opens it and thinks "someone who writes code built this", not "a template generated this". Calm, dense, readable, keyboard-first. Closer to a good documentation site or a well-made terminal tool than to a SaaS landing page.
 
@@ -36,7 +36,7 @@ Do not use any of these:
 
 ## 3. Visual identity
 
-- **Wordmark:** `devbook` in the mono font, lowercase, weight 600. No logo mark in V1.
+- **Wordmark:** `cairn` in the mono font, lowercase, weight 600. No logo mark in V1.
 - **Feel:** a printed technical handbook. Warm paper background, ink-dark text, one rust accent.
 - **Corners:** 3px on controls, 0 on content blocks. Nothing larger.
 - **Lines:** 1px solid borders. Section breaks use a border, not extra whitespace.
@@ -124,7 +124,7 @@ Rules:
 
 ```
 +--------------------------------------------------------------------------+
-| devbook   [ Search notes...                    Ctrl K ]   New    @rahim  |
+| cairn     [ Search notes...                    Ctrl K ]   New    @rahim  |
 +--------------------------------------------------------------------------+
 | rahim / notes        | Read first                       | On this page   |
 |                      |  1. Variables                    |  What it is    |
@@ -153,7 +153,7 @@ Rules:
 No hero. A short statement, a search box, and real content.
 
 ```
-devbook
+cairn
 
 Linked notes for developers.
 Write what you learn. Link what depends on what.
@@ -281,7 +281,7 @@ Three sections stacked, each separated by a border: Profile (bio), Export data, 
 
 ### 7.8 Admin panel
 
-Django admin. Light customization only: site title `devbook admin`, same fonts via an extra CSS file, list filters and actions as described in ARCHITECTURE.md. Do not rebuild the admin UI.
+Django admin. Light customization only: site title `cairn admin`, same fonts via an extra CSS file, list filters and actions as described in ARCHITECTURE.md. Do not rebuild the admin UI.
 
 ## 8. Components
 

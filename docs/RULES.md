@@ -1,4 +1,4 @@
-# RULES: Devbook
+# RULES: Cairn
 
 These rules apply to every contributor, including AI coding assistants. If a rule here conflicts with a quick fix, the rule wins. If a rule is wrong, change this file in a separate commit and explain why.
 

@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from api.routers import users
 
 api_app = FastAPI(
-    title="Devbook API",
+    title="Cairn API",
     version="1.0.0",
     docs_url="/api/docs" if getattr(settings, "ENABLE_API_DOCS", False) else None,
     redoc_url=None,

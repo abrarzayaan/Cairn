@@ -1,14 +1,14 @@
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Sign in · devbook",
+  title: "Sign in · Cairn",
 };
 
 export default function LoginPage() {
   return (
     <div className="mx-auto max-w-[400px] py-16 text-center">
       <h1 className="mb-2 font-mono text-3xl font-semibold tracking-tight text-text">
-        devbook
+        cairn
       </h1>
       <p className="mb-8 text-sm text-text-muted">
         Linked notes for developers.

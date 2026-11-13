@@ -14,9 +14,9 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: devbook_test
-          POSTGRES_USER: devbook
-          POSTGRES_PASSWORD: devbook_password
+          POSTGRES_DB: cairn_test
+          POSTGRES_USER: cairn
+          POSTGRES_PASSWORD: cairn_password
         ports:
           - 5432:5432
         options: >-
@@ -28,7 +28,7 @@ jobs:
     env:
       DJANGO_SETTINGS_MODULE: config.settings.dev
       SECRET_KEY: test-secret-key-ci-only
-      DATABASE_URL: postgres://devbook:devbook_password@localhost:5432/devbook_test
+      DATABASE_URL: postgres://cairn:cairn_password@localhost:5432/cairn_test
 
     steps:
       - uses: actions/checkout@v4

@@ -1,5 +1,5 @@
 [project]
-name = "devbook"
+name = "cairn"
 version = "0.1.0"
 description = "Linked notes for developers"
 readme = "README.md"

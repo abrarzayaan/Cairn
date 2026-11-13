@@ -1,25 +1,25 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: devbook_db
+    container_name: cairn_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: devbook
-      POSTGRES_USER: devbook
-      POSTGRES_PASSWORD: devbook_password
+      POSTGRES_DB: cairn
+      POSTGRES_USER: cairn
+      POSTGRES_PASSWORD: cairn_password
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U devbook -d devbook"]
+      test: ["CMD-SHELL", "pg_isready -U cairn -d cairn"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: devbook_redis
+    container_name: cairn_redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -28,7 +28,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: devbook_web
+    container_name: cairn_web
     restart: unless-stopped
     command: gunicorn config.asgi:application -k uvicorn.workers.UvicornWorker -w 3 -b 0.0.0.0:8000
     volumes:

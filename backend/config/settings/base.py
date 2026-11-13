@@ -111,7 +111,7 @@ def parse_db_url(url: str):
     }
 
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://devbook:devbook@localhost:5432/devbook")
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://cairn:cairn@localhost:5432/cairn")
 DATABASES = {"default": parse_db_url(DATABASE_URL)}
 
 AUTH_PASSWORD_VALIDATORS = [

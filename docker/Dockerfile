@@ -17,8 +17,8 @@ RUN pip install --no-cache-dir .
 
 COPY backend /app/backend
 
-RUN useradd -m -u 1000 devbook && chown -R devbook:devbook /app
-USER devbook
+RUN useradd -m -u 1000 cairn && chown -R cairn:cairn /app
+USER cairn
 
 EXPOSE 8000
 

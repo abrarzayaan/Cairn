@@ -1,4 +1,4 @@
-# PRD: Devbook (working title)
+# PRD: Cairn
 
 Status: Draft v1
 Scope of this document: **V1 only**. Anything not listed in V1 is in "Future" and must not be built yet.
@@ -254,7 +254,7 @@ The data model must leave room for these (see ARCHITECTURE.md) but nothing here 
 
 | # | Question | Default if undecided |
 |---|----------|----------------------|
-| 1 | Final product name and domain | Keep "Devbook" as a code name |
+| 1 | Final product name and domain | Cairn |
 | 2 | Open source license | MIT for code; content stays owned by authors |
 | 3 | Content license for public notes | Author keeps copyright; platform gets display license |
 | 4 | Do cross-author links need the other author's consent? | No. Public notes may be linked by anyone |
