@@ -49,13 +49,26 @@ def main():
             cmd.extend(["-m", "uvicorn"])
         cmd.extend([
             "config.asgi:application",
+            "--app-dir",
+            str(backend_dir),
             "--host",
             host,
             "--port",
             port,
             "--reload",
+            "--reload-dir",
+            str(backend_dir),
+            "--reload-exclude",
+            "*.sqlite3*",
+            "--reload-exclude",
+            "*.log",
         ])
-        sys.exit(subprocess.call(cmd))
+        run_env = os.environ.copy()
+        existing_pythonpath = run_env.get("PYTHONPATH", "")
+        run_env["PYTHONPATH"] = (
+            str(backend_dir) + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
+        )
+        sys.exit(subprocess.call(cmd, env=run_env))
 
     try:
         from django.core.management import execute_from_command_line

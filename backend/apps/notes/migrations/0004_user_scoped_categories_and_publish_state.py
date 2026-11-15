@@ -20,15 +20,6 @@ def migrate_existing_categories_and_seed_starters(apps, schema_editor):
         ("General", "general", "Developer workflows, tooling, debugging logs, and general notes."),
     ]
 
-    # For each user, seed starter categories
-    for user in User.objects.all():
-        for name, slug, description in PRESET_CATEGORIES:
-            Category.objects.get_or_create(
-                author=user,
-                slug=slug,
-                defaults={"name": name, "description": description},
-            )
-
     # Re-link existing books to their author's personal category
     for book in Book.objects.select_related("category", "author").all():
         old_cat = book.category
@@ -44,8 +35,17 @@ def migrate_existing_categories_and_seed_starters(apps, schema_editor):
             book.category = user_cat
             book.save(update_fields=["category"])
 
-    # Remove global categories that have no author
+    # Remove global categories that have no author before seeding starters
     Category.objects.filter(author__isnull=True).delete()
+
+    # For each user, seed starter categories
+    for user in User.objects.all():
+        for name, slug, description in PRESET_CATEGORIES:
+            Category.objects.get_or_create(
+                author=user,
+                slug=slug,
+                defaults={"name": name, "description": description},
+            )
 
 
 def reverse_migrate_categories(apps, schema_editor):
@@ -82,22 +82,7 @@ class Migration(migrations.Migration):
             name="is_published",
             field=models.BooleanField(default=False),
         ),
-        # 3. Data migration: assign categories to authors and seed starters
-        migrations.RunPython(
-            migrate_existing_categories_and_seed_starters,
-            reverse_migrate_categories,
-        ),
-        # 4. Make Category.author non-nullable
-        migrations.AlterField(
-            model_name="category",
-            name="author",
-            field=models.ForeignKey(
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="categories",
-                to=settings.AUTH_USER_MODEL,
-            ),
-        ),
-        # 5. Remove unique constraints on name and slug alone
+        # 3. Remove standalone unique constraints on name and slug alone before seeding
         migrations.AlterField(
             model_name="category",
             name="name",
@@ -107,6 +92,21 @@ class Migration(migrations.Migration):
             model_name="category",
             name="slug",
             field=models.CharField(max_length=70),
+        ),
+        # 4. Data migration: assign categories to authors and seed starters
+        migrations.RunPython(
+            migrate_existing_categories_and_seed_starters,
+            reverse_migrate_categories,
+        ),
+        # 5. Make Category.author non-nullable
+        migrations.AlterField(
+            model_name="category",
+            name="author",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="categories",
+                to=settings.AUTH_USER_MODEL,
+            ),
         ),
         # 6. Add indexes and constraints on Category
         migrations.AddIndex(
