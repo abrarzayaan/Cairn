@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, FolderPlus } from "lucide-react";
+import { X, FolderPlus, Globe, Lock, BookOpen } from "lucide-react";
 import {
   BookSummary,
   Category,
@@ -17,6 +17,8 @@ interface CreateBookModalProps {
   onCreated: (book: BookSummary, createdCategory?: Category) => void;
 }
 
+type AccessState = "private" | "public_desk" | "published";
+
 export default function CreateBookModal({
   open,
   categories,
@@ -30,7 +32,7 @@ export default function CreateBookModal({
   const [categoryId, setCategoryId] = useState<number | "">(
     defaultCategoryId || categories[0]?.id || ""
   );
-  const [visibility, setVisibility] = useState<"private" | "public">("private");
+  const [accessState, setAccessState] = useState<AccessState>("private");
   const [addingCat, setAddingCat] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -69,17 +71,20 @@ export default function CreateBookModal({
     setError(null);
     setBusy(true);
     try {
+      const visibility = accessState === "private" ? "private" : "public";
+      const is_published = accessState === "published";
       const created = await createBook({
         title: title.trim(),
         category_id: categoryId ? Number(categoryId) : null,
         description: description.trim(),
         visibility,
+        is_published,
       });
       const maybeNewCat = activeCategories.find((c) => c.id === created.category.id);
       onCreated(created, maybeNewCat);
       setTitle("");
       setDescription("");
-      setVisibility("private");
+      setAccessState("private");
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create book");
@@ -95,7 +100,7 @@ export default function CreateBookModal({
       aria-modal="true"
       aria-labelledby="create-book-title"
     >
-      <div className="w-full max-w-md rounded-md border border-border-strong bg-bg p-5 shadow-xl">
+      <div className="w-full max-w-lg rounded-md border border-border-strong bg-bg p-5 shadow-xl">
         <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
           <h2
             id="create-book-title"
@@ -123,7 +128,7 @@ export default function CreateBookModal({
           <div>
             <div className="mb-1 flex items-center justify-between">
               <label className="font-mono text-xs text-text-muted">
-                Topic Category
+                Desk Category
               </label>
               <button
                 type="button"
@@ -143,7 +148,7 @@ export default function CreateBookModal({
                   onChange={(e) => setNewCatName(e.target.value)}
                   placeholder="e.g. Distributed Systems"
                   maxLength={60}
-                  className="flex-1 rounded border border-border-strong bg-bg px-2.5 py-1.5 font-sans text-sm text-text"
+                  className="flex-1 rounded border border-border-strong bg-bg px-2.5 py-1.5 font-sans text-sm text-text focus:border-accent focus:outline-none"
                 />
                 <button
                   type="button"
@@ -160,7 +165,7 @@ export default function CreateBookModal({
                 onChange={(e) =>
                   setCategoryId(e.target.value ? Number(e.target.value) : "")
                 }
-                className="w-full rounded border border-border-strong bg-bg px-2.5 py-1.5 font-sans text-sm text-text"
+                className="w-full rounded border border-border-strong bg-bg px-2.5 py-1.5 font-sans text-sm text-text focus:border-accent focus:outline-none"
               >
                 {activeCategories.map((cat) => (
                   <option key={cat.id} value={cat.id}>
@@ -182,7 +187,7 @@ export default function CreateBookModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. PostgreSQL Internals"
-              className="w-full rounded border border-border-strong bg-bg px-3 py-1.5 font-sans text-sm text-text"
+              className="w-full rounded border border-border-strong bg-bg px-3 py-1.5 font-sans text-sm text-text focus:border-accent focus:outline-none"
             />
           </div>
 
@@ -196,38 +201,61 @@ export default function CreateBookModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="What sequence of concepts this documentation book covers..."
-              className="w-full rounded border border-border-strong bg-bg px-3 py-1.5 font-sans text-sm text-text"
+              className="w-full rounded border border-border-strong bg-bg px-3 py-1.5 font-sans text-sm text-text focus:border-accent focus:outline-none"
             />
           </div>
 
           <div>
             <label className="mb-1.5 block font-mono text-xs text-text-muted">
-              Visibility
+              Access &amp; Publishing
             </label>
-            <div className="grid grid-cols-2 gap-2 font-mono text-xs">
+            <div className="grid grid-cols-1 gap-2 font-mono text-xs sm:grid-cols-3">
               <button
                 type="button"
-                onClick={() => setVisibility("private")}
-                className={`rounded border px-3 py-2 text-left transition-colors ${
-                  visibility === "private"
-                    ? "border-warn bg-bg-subtle text-warn"
+                onClick={() => setAccessState("private")}
+                className={`rounded border p-2.5 text-left transition-colors ${
+                  accessState === "private"
+                    ? "border-warn bg-bg-subtle text-warn font-medium shadow-sm"
                     : "border-border bg-bg text-text-muted hover:border-border-strong"
                 }`}
               >
-                <div className="font-semibold">Private</div>
-                <div className="text-[10px] opacity-80">Only visible to you</div>
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <Lock className="h-3.5 w-3.5" />
+                  <span>Private</span>
+                </div>
+                <div className="mt-1 text-[10px] opacity-80">Only you on your desk</div>
               </button>
+
               <button
                 type="button"
-                onClick={() => setVisibility("public")}
-                className={`rounded border px-3 py-2 text-left transition-colors ${
-                  visibility === "public"
-                    ? "border-ok bg-bg-subtle text-ok"
+                onClick={() => setAccessState("public_desk")}
+                className={`rounded border p-2.5 text-left transition-colors ${
+                  accessState === "public_desk"
+                    ? "border-accent bg-bg-subtle text-accent font-medium shadow-sm"
                     : "border-border bg-bg text-text-muted hover:border-border-strong"
                 }`}
               >
-                <div className="font-semibold">Public</div>
-                <div className="text-[10px] opacity-80">Searchable by devs</div>
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <BookOpen className="h-3.5 w-3.5" />
+                  <span>Public Desk</span>
+                </div>
+                <div className="mt-1 text-[10px] opacity-80">Profile &amp; link only</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAccessState("published")}
+                className={`rounded border p-2.5 text-left transition-colors ${
+                  accessState === "published"
+                    ? "border-ok bg-bg-subtle text-ok font-medium shadow-sm"
+                    : "border-border bg-bg text-text-muted hover:border-border-strong"
+                }`}
+              >
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <Globe className="h-3.5 w-3.5" />
+                  <span>Published</span>
+                </div>
+                <div className="mt-1 text-[10px] opacity-80">Global search &amp; feeds</div>
               </button>
             </div>
           </div>
@@ -253,4 +281,3 @@ export default function CreateBookModal({
     </div>
   );
 }
-

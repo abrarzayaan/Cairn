@@ -51,8 +51,14 @@ function SearchPageInner() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchCategories().then(setAllCategories);
-  }, []);
+    if (scope === "mine") {
+      fetchCategories().then(setAllCategories);
+    } else if (author.trim()) {
+      fetchCategories(author.trim().replace(/^@/, "")).then(setAllCategories);
+    } else {
+      setAllCategories([]);
+    }
+  }, [scope, author]);
 
   useEffect(() => {
     const nextType = (searchParams.get("type") as SearchType) || "all";
@@ -170,13 +176,20 @@ function SearchPageInner() {
         {/* TYPE PILLS */}
         <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
           {(
-            [
-              ["all", "All"],
-              ["books", "Books"],
-              ["notes", "Chapters & Notes"],
-              ["categories", "Categories"],
-              ["users", "Developers"],
-            ] as [SearchType, string][]
+            (scope === "mine" || author.trim()
+              ? [
+                  ["all", "All"],
+                  ["books", "Books"],
+                  ["notes", "Chapters & Notes"],
+                  ["categories", "Desk Categories"],
+                  ["users", "Developers"],
+                ]
+              : [
+                  ["all", "All"],
+                  ["books", "Books"],
+                  ["notes", "Chapters & Notes"],
+                  ["users", "Developers"],
+                ]) as [SearchType, string][]
           ).map(([val, label]) => (
             <button
               key={val}
@@ -198,19 +211,29 @@ function SearchPageInner() {
 
         {/* SECONDARY FILTERS */}
         <div className="grid grid-cols-1 gap-2.5 pt-1 font-mono text-xs sm:grid-cols-4">
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            aria-label="Filter by category"
-            className="rounded border border-border bg-bg px-2.5 py-1.5 text-text focus:border-accent focus:outline-none"
-          >
-            <option value="">All Categories</option>
-            {allCategories.map((c) => (
-              <option key={c.id} value={c.slug}>
-                {c.name} ({c.book_count})
+          {scope === "mine" || author.trim() ? (
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              aria-label="Filter by category"
+              className="rounded border border-border bg-bg px-2.5 py-1.5 text-text focus:border-accent focus:outline-none"
+            >
+              <option value="">
+                {scope === "mine"
+                  ? "All My Categories"
+                  : `@${author.trim().replace(/^@/, "")}'s Categories`}
               </option>
-            ))}
-          </select>
+              {allCategories.map((c) => (
+                <option key={c.id} value={c.slug}>
+                  {c.name} ({c.book_count})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="flex items-center rounded border border-border/60 bg-bg px-2.5 py-1.5 text-text-muted/70">
+              <span className="truncate">Desk category (set @dev or My Docs)</span>
+            </div>
+          )}
 
           <input
             type="text"
@@ -289,7 +312,8 @@ function SearchPageInner() {
                         </p>
                       )}
                       <div className="mt-1 font-mono text-[11px] text-text-muted">
-                        {u.public_book_count} books &middot; {u.public_note_count} notes
+                        {u.published_book_count ?? u.public_book_count} published books &middot;{" "}
+                        {u.published_note_count ?? u.public_note_count} published docs
                       </div>
                     </div>
                   </Link>
@@ -379,10 +403,16 @@ function SearchPageInner() {
                         className={`rounded border px-1.5 py-0.5 font-mono text-[11px] ${
                           hit.visibility === "private"
                             ? "border-warn/40 bg-bg-subtle text-warn"
-                            : "border-ok/30 bg-bg-subtle text-ok"
+                            : hit.is_published
+                            ? "border-ok/30 bg-bg-subtle text-ok"
+                            : "border-accent/30 bg-bg-subtle text-accent"
                         }`}
                       >
-                        {hit.visibility}
+                        {hit.visibility === "private"
+                          ? "private"
+                          : hit.is_published
+                          ? "published"
+                          : "public (desk)"}
                       </span>
                     </div>
 

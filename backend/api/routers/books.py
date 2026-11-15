@@ -11,6 +11,7 @@ from api.schemas.notes import (
     BookUpdateIn,
     CategoryCreateIn,
     CategoryOut,
+    CategoryUpdateIn,
     ChapterRefOut,
 )
 from apps.accounts.models import User
@@ -19,11 +20,13 @@ from apps.notes.services.books import (
     create_book,
     create_category,
     delete_book,
+    delete_category,
     get_book_chapters,
     get_visible_book,
     list_categories_with_counts,
     reorder_book_chapters,
     update_book,
+    update_category,
 )
 from apps.notes.services.notes import visible_books_q, visible_notes_q
 
@@ -38,6 +41,7 @@ def serialize_chapter_ref(note: Note) -> ChapterRefOut:
         slug=note.slug,
         sequence=note.sequence,
         visibility=note.visibility,
+        is_published=note.is_published,
         summary=note.summary,
         updated_at=note.updated_at,
     )
@@ -65,6 +69,7 @@ def serialize_book_summary(
         slug=book.slug,
         description=book.description,
         visibility=book.visibility,
+        is_published=book.is_published,
         moderation=book.moderation,
         moderation_note=book.moderation_note if include_moderation_note else "",
         author_username=book.author.username,
@@ -89,20 +94,23 @@ def _visible_chapter_filter(viewer) -> Q:
 
 
 @router.get("/categories", response_model=list[CategoryOut])
-def get_categories(viewer: User | None = Depends(get_current_user)):
-    """List all categories with visible book counts."""
-    return [CategoryOut(**c) for c in list_categories_with_counts(viewer)]
+def get_categories(
+    username: str | None = Query(default=None),
+    viewer: User | None = Depends(get_current_user),
+):
+    """List personal categories with book counts (own desk or a user's desk)."""
+    return [CategoryOut(**c) for c in list_categories_with_counts(viewer, username=username)]
 
 
 @router.post("/categories", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
 def post_category(
     data: CategoryCreateIn,
-    _user: User = Depends(require_user),
+    user: User = Depends(require_user),
     _csrf: None = Depends(verify_csrf),
 ):
-    """Create a custom topic category."""
+    """Create a personal topic category on the user's desk."""
     try:
-        cat = create_category(name=data.name, description=data.description)
+        cat = create_category(author=user, name=data.name, description=data.description)
     except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -115,6 +123,52 @@ def post_category(
         description=cat.description,
         book_count=0,
     )
+
+
+@router.patch("/categories/{category_id}", response_model=CategoryOut)
+def patch_category(
+    category_id: int,
+    data: CategoryUpdateIn,
+    user: User = Depends(require_user),
+    _csrf: None = Depends(verify_csrf),
+):
+    """Update a personal category on the user's desk."""
+    try:
+        cat = update_category(
+            author=user,
+            category_id=category_id,
+            name=data.name,
+            description=data.description,
+        )
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": {"code": "validation_error", "message": str(exc)}},
+        ) from exc
+    return CategoryOut(
+        id=cat.id,
+        name=cat.name,
+        slug=cat.slug,
+        description=cat.description,
+        book_count=cat.books.count(),
+    )
+
+
+@router.delete("/categories/{category_id}")
+def delete_category_endpoint(
+    category_id: int,
+    user: User = Depends(require_user),
+    _csrf: None = Depends(verify_csrf),
+):
+    """Delete an empty personal category from the user's desk."""
+    try:
+        delete_category(author=user, category_id=category_id)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": {"code": "validation_error", "message": str(exc)}},
+        ) from exc
+    return {"ok": True}
 
 
 @router.get("/books/mine", response_model=list[BookSummaryOut])
@@ -168,6 +222,7 @@ def post_book(
             category_id=data.category_id,
             description=data.description,
             visibility=data.visibility,
+            is_published=data.is_published,
             custom_slug=data.slug,
         )
     except ValidationError as exc:
@@ -237,6 +292,7 @@ def patch_book(
             category_id=data.category_id,
             description=data.description,
             visibility=data.visibility,
+            is_published=data.is_published,
             custom_slug=data.slug,
         )
     except Book.DoesNotExist:

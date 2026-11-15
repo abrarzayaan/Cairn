@@ -180,7 +180,7 @@ export default function SearchPalette({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search books, chapters, categories, or @developer..."
+            placeholder="Search published books, chapters, topics, or @developer..."
             className="w-full bg-transparent font-mono text-sm text-text placeholder:text-text-muted focus:outline-none"
           />
           <kbd className="ml-2 rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
@@ -266,8 +266,8 @@ export default function SearchPalette({
                                 @<HighlightMatch text={entry.item.username} query={query} />
                               </div>
                               <div className="font-mono text-[11px] text-text-muted">
-                                Developer &middot; {entry.item.public_book_count} books &middot;{" "}
-                                {entry.item.public_note_count} notes
+                                Developer &middot; {entry.item.published_book_count ?? entry.item.public_book_count} published books &middot;{" "}
+                                {entry.item.published_note_count ?? entry.item.public_note_count} published docs
                               </div>
                             </>
                           )}

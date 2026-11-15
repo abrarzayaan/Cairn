@@ -18,6 +18,7 @@ class SearchHitOut(BaseModel):
     slug: str
     author_username: str
     visibility: str
+    is_published: bool = False
     tags: list[str] = []
     snippet: str = ""
     book_id: int | None = None
@@ -46,6 +47,8 @@ class WorkspaceStatsOut(BaseModel):
 class UserSearchHitOut(BaseModel):
     username: str
     bio: str = ""
+    published_book_count: int = 0
+    published_note_count: int = 0
     public_book_count: int = 0
     public_note_count: int = 0
 

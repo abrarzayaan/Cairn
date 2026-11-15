@@ -44,8 +44,12 @@ export default function BookTocClient({
   const [title, setTitle] = useState(initialBook.title);
   const [description, setDescription] = useState(initialBook.description);
   const [categoryId, setCategoryId] = useState(initialBook.category.id);
-  const [visibility, setVisibility] = useState<"public" | "private">(
-    initialBook.visibility
+  const [accessState, setAccessState] = useState<"private" | "public_desk" | "published">(
+    initialBook.visibility === "private"
+      ? "private"
+      : initialBook.is_published
+      ? "published"
+      : "public_desk"
   );
   const [busy, setBusy] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -70,11 +74,14 @@ export default function BookTocClient({
     setErrorMsg(null);
     setStatusMsg(null);
     try {
+      const visibility = accessState === "private" ? "private" : "public";
+      const is_published = accessState === "published";
       const updated = await updateBook(book.id, {
         title: title.trim(),
         description: description.trim(),
         category_id: categoryId,
         visibility,
+        is_published,
       });
       setBook(updated);
       setEditing(false);
@@ -178,11 +185,27 @@ export default function BookTocClient({
               className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 ${
                 isPrivate
                   ? "border-warn/40 bg-bg text-warn"
-                  : "border-ok/30 bg-bg text-ok"
+                  : book.is_published
+                  ? "border-ok/30 bg-bg text-ok"
+                  : "border-accent/30 bg-bg text-accent"
               }`}
             >
-              {isPrivate ? <Lock className="h-3 w-3" /> : <Globe className="h-3 w-3" />}
-              {book.visibility}
+              {isPrivate ? (
+                <>
+                  <Lock className="h-3 w-3" />
+                  <span>Private</span>
+                </>
+              ) : book.is_published ? (
+                <>
+                  <Globe className="h-3 w-3" />
+                  <span>Published</span>
+                </>
+              ) : (
+                <>
+                  <BookOpen className="h-3 w-3" />
+                  <span>Public (Desk)</span>
+                </>
+              )}
             </span>
             <span className="text-text-muted">
               {chapters.length} {chapters.length === 1 ? "chapter" : "chapters"}

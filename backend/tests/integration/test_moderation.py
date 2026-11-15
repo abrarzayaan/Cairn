@@ -72,7 +72,7 @@ def test_hidden_note_excluded_everywhere_except_owner(api_client, client):
     author = User.objects.create_user(username="hide_author", github_id=9203)
     other = User.objects.create_user(username="hide_other", github_id=9204)
 
-    note = create_note(author=author, title="Hidden Target", content_md="Body", visibility="public")
+    note = create_note(author=author, title="Hidden Target", content_md="Body", visibility="public", is_published=True)
     hide_note(note, "Contains spam")
 
     # Anonymous / other user -> 404 on note, path, preview, and excluded from search
@@ -97,7 +97,7 @@ def test_banned_user_sessions_invalidated_and_notes_hidden(api_client, client):
     """Banning a user invalidates all sessions and hides all their public notes."""
     search_rate_limiter.reset()
     bad_user = User.objects.create_user(username="bad_user", github_id=9205)
-    pub_note = create_note(author=bad_user, title="Bad Public Note", content_md="spam", visibility="public")
+    pub_note = create_note(author=bad_user, title="Bad Public Note", content_md="spam", visibility="public", is_published=True)
 
     _login_api_client(api_client, client, bad_user)
     assert api_client.get("/api/v1/auth/me").json()["authenticated"] is True

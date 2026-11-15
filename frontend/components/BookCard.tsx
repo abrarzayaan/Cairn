@@ -33,11 +33,27 @@ export default function BookCard({
             className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[11px] ${
               isPrivate
                 ? "border-warn/40 bg-bg-subtle text-warn"
-                : "border-ok/30 bg-bg-subtle text-ok"
+                : book.is_published
+                ? "border-ok/30 bg-bg-subtle text-ok"
+                : "border-accent/30 bg-bg-subtle text-accent"
             }`}
           >
-            {isPrivate ? <Lock className="h-3 w-3" /> : <Globe className="h-3 w-3" />}
-            {book.visibility}
+            {isPrivate ? (
+              <>
+                <Lock className="h-3 w-3" />
+                <span>Private</span>
+              </>
+            ) : book.is_published ? (
+              <>
+                <Globe className="h-3 w-3" />
+                <span>Published</span>
+              </>
+            ) : (
+              <>
+                <BookOpen className="h-3 w-3" />
+                <span>Public (Desk)</span>
+              </>
+            )}
           </span>
         </div>
 

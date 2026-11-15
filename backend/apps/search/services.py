@@ -8,7 +8,12 @@ from django.db.models import Count, F, Q
 from apps.accounts.models import User
 from apps.notes.models import Book, Note, Tag
 from apps.notes.services.books import list_categories_with_counts
-from apps.notes.services.notes import visible_books_q, visible_notes_q
+from apps.notes.services.notes import (
+    published_books_q,
+    published_notes_q,
+    visible_books_q,
+    visible_notes_q,
+)
 
 
 def _visible_chapter_q(viewer) -> Q:
@@ -18,6 +23,15 @@ def _visible_chapter_q(viewer) -> Q:
     return q
 
 
+def _published_chapter_q() -> Q:
+    return Q(
+        notes__visibility="public",
+        notes__is_published=True,
+        notes__moderation="ok",
+        notes__author__is_banned=False,
+    )
+
+
 def _serialize_book_hit(book: Book) -> dict:
     return {
         "id": book.id,
@@ -25,6 +39,7 @@ def _serialize_book_hit(book: Book) -> dict:
         "slug": book.slug,
         "description": book.description,
         "visibility": book.visibility,
+        "is_published": book.is_published,
         "moderation": book.moderation,
         "moderation_note": "",
         "author_username": book.author.username,
@@ -129,6 +144,7 @@ def _serialize_search_hit(note: Note, query_text: str) -> dict:
         "slug": note.slug,
         "author_username": note.author.username,
         "visibility": note.visibility,
+        "is_published": note.is_published,
         "tags": [t.name for t in note.tags.all()],
         "snippet": _build_snippet(note.content_md, query_text),
         "book_id": note.book_id,
@@ -148,11 +164,13 @@ def _search_books(
     author: str | None = None,
     scope: str = "all",
 ) -> list[dict]:
-    if scope == "mine" and not (viewer and getattr(viewer, "is_authenticated", False)):
-        return []
-    qs = Book.objects.filter(visible_books_q(viewer)).select_related("author", "category")
     if scope == "mine":
-        qs = qs.filter(author=viewer)
+        if not (viewer and getattr(viewer, "is_authenticated", False)):
+            return []
+        qs = Book.objects.filter(author=viewer).select_related("author", "category")
+    else:
+        qs = Book.objects.filter(published_books_q()).select_related("author", "category")
+
     if category and category.strip():
         qs = qs.filter(category__slug=category.strip().lower())
     if author and author.strip():
@@ -163,14 +181,21 @@ def _search_books(
             | Q(description__icontains=query_text)
             | Q(category__name__icontains=query_text)
         )
+    chapter_filter = _visible_chapter_q(viewer) if scope == "mine" else _published_chapter_q()
     qs = qs.annotate(
-        _chapter_count=Count("notes", filter=_visible_chapter_q(viewer), distinct=True)
+        _chapter_count=Count("notes", filter=chapter_filter, distinct=True)
     ).order_by("-updated_at", "-id")[:20]
     return [_serialize_book_hit(b) for b in qs]
 
 
-def _search_categories(viewer, query_text: str, category: str | None = None) -> list[dict]:
-    cats = list_categories_with_counts(viewer)
+def _search_categories(viewer, query_text: str, category: str | None = None, author: str | None = None) -> list[dict]:
+    if author and author.strip():
+        cats = list_categories_with_counts(viewer, username=author.strip().lstrip("@"))
+    elif viewer and getattr(viewer, "is_authenticated", False):
+        cats = list_categories_with_counts(viewer)
+    else:
+        cats = []
+
     if category and category.strip():
         cat_slug = category.strip().lower()
         cats = [c for c in cats if c["slug"] == cat_slug]
@@ -189,9 +214,54 @@ def _search_categories(viewer, query_text: str, category: str | None = None) -> 
 def _search_users(query_text: str) -> list[dict]:
     qs = User.objects.filter(is_banned=False)
     if query_text:
-        clean_q = query_text.lstrip("@")
-        qs = qs.filter(Q(username__icontains=clean_q) | Q(bio__icontains=clean_q))
+        clean_q = query_text.lstrip("@").strip()
+        book_match_q = Q(
+            books__visibility="public",
+            books__is_published=True,
+            books__moderation="ok",
+        ) & (
+            Q(books__title__icontains=query_text)
+            | Q(books__description__icontains=query_text)
+        )
+        note_match_q = Q(
+            notes__visibility="public",
+            notes__is_published=True,
+            notes__moderation="ok",
+        ) & (
+            Q(notes__book__isnull=True)
+            | Q(
+                notes__book__visibility="public",
+                notes__book__is_published=True,
+                notes__book__moderation="ok",
+            )
+        ) & (
+            Q(notes__title__icontains=query_text)
+            | Q(notes__content_md__icontains=query_text)
+            | Q(notes__tags__name__iexact=clean_q.lstrip("#"))
+        )
+
+        qs = qs.filter(
+            Q(username__icontains=clean_q)
+            | Q(bio__icontains=clean_q)
+            | book_match_q
+            | note_match_q
+        ).distinct()
+
     qs = qs.annotate(
+        published_book_count=Count(
+            "books",
+            filter=Q(books__visibility="public", books__is_published=True, books__moderation="ok"),
+            distinct=True,
+        ),
+        published_note_count=Count(
+            "notes",
+            filter=Q(notes__visibility="public", notes__is_published=True, notes__moderation="ok")
+            & (
+                Q(notes__book__isnull=True)
+                | Q(notes__book__visibility="public", notes__book__is_published=True, notes__book__moderation="ok")
+            ),
+            distinct=True,
+        ),
         public_book_count=Count(
             "books",
             filter=Q(books__visibility="public", books__moderation="ok"),
@@ -206,11 +276,13 @@ def _search_users(query_text: str) -> list[dict]:
             ),
             distinct=True,
         ),
-    ).order_by("-public_book_count", "-public_note_count", "username")[:15]
+    ).order_by("-published_book_count", "-published_note_count", "-public_book_count", "username")[:15]
     return [
         {
             "username": u.username,
             "bio": u.bio,
+            "published_book_count": u.published_book_count,
+            "published_note_count": u.published_note_count,
             "public_book_count": u.public_book_count,
             "public_note_count": u.public_note_count,
         }
@@ -241,8 +313,8 @@ def search_notes(
         else []
     )
     categories_out = (
-        _search_categories(viewer, query_text, category=category)
-        if search_type in ("all", "categories") and scope != "mine" and (query_text or search_type == "categories")
+        _search_categories(viewer, query_text, category=category, author=author)
+        if search_type in ("all", "categories") and (query_text or search_type == "categories")
         else []
     )
     users_out = (
@@ -262,17 +334,8 @@ def search_notes(
             "users": users_out,
         }
 
-    qs = (
-        Note.objects.filter(visible_notes_q(viewer))
-        .select_related("author", "book", "book__category")
-        .prefetch_related("tags")
-        .distinct()
-    )
-
     if scope == "mine":
-        if viewer and getattr(viewer, "is_authenticated", False):
-            qs = qs.filter(author=viewer)
-        else:
+        if not (viewer and getattr(viewer, "is_authenticated", False)):
             return {
                 "total": 0,
                 "limit": limit,
@@ -282,6 +345,16 @@ def search_notes(
                 "categories": [],
                 "users": [],
             }
+        qs = Note.objects.filter(author=viewer)
+    else:
+        # Global search: ONLY published notes
+        qs = Note.objects.filter(published_notes_q())
+
+    qs = (
+        qs.select_related("author", "book", "book__category")
+        .prefetch_related("tags")
+        .distinct()
+    )
 
     if tag and tag.strip():
         clean_tag = tag.strip().lstrip("#").lower()
@@ -359,9 +432,9 @@ def _serialize_workspace_note(note: Note) -> dict:
 
 
 def get_home_feed(viewer) -> dict:
-    """Return recent public books/notes, categories, topics, and viewer's workspace."""
+    """Return recent published books/notes, viewer's desk categories, published topics, and viewer's workspace."""
     public_qs = (
-        Note.objects.filter(visible_notes_q(None))
+        Note.objects.filter(published_notes_q())
         .select_related("author", "book", "book__category")
         .prefetch_related("tags")
         .annotate(
@@ -376,9 +449,9 @@ def get_home_feed(viewer) -> dict:
     recent_public = [_serialize_workspace_note(n) for n in public_qs[:12]]
 
     public_books_qs = (
-        Book.objects.filter(visible_books_q(None))
+        Book.objects.filter(published_books_q())
         .select_related("author", "category")
-        .annotate(_chapter_count=Count("notes", filter=_visible_chapter_q(None), distinct=True))
+        .annotate(_chapter_count=Count("notes", filter=_published_chapter_q(), distinct=True))
         .order_by("-updated_at", "-id")
     )
     recent_books = [_serialize_book_hit(b) for b in public_books_qs[:12]]
@@ -388,11 +461,16 @@ def get_home_feed(viewer) -> dict:
     topics_qs = (
         Tag.objects.filter(
             Q(notetag__note__visibility="public")
+            & Q(notetag__note__is_published=True)
             & Q(notetag__note__moderation="ok")
             & Q(notetag__note__author__is_banned=False)
             & (
                 Q(notetag__note__book__isnull=True)
-                | Q(notetag__note__book__visibility="public", notetag__note__book__moderation="ok")
+                | Q(
+                    notetag__note__book__visibility="public",
+                    notetag__note__book__is_published=True,
+                    notetag__note__book__moderation="ok",
+                )
             )
         )
         .annotate(note_count=Count("notetag__note", distinct=True))
@@ -462,13 +540,7 @@ def get_user_profile(viewer, username: str) -> dict | None:
     )
     books = [_serialize_book_hit(b) for b in books_qs]
 
-    cat_map: dict[int, dict] = {}
-    for b in books:
-        cat = b["category"]
-        if cat["id"] not in cat_map:
-            cat_map[cat["id"]] = {**cat, "book_count": 0}
-        cat_map[cat["id"]]["book_count"] += 1
-    profile_categories = sorted(cat_map.values(), key=lambda c: (-c["book_count"], c["name"]))
+    profile_categories = list_categories_with_counts(viewer, username=profile_user.username)
 
     notes_qs = (
         Note.objects.filter(visible_notes_q(viewer), author=profile_user)

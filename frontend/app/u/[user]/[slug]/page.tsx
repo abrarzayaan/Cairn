@@ -267,10 +267,16 @@ export default async function NotePage({ params }: PageProps) {
               className={`rounded border px-1.5 py-0.5 text-[11px] ${
                 isPrivate
                   ? "border-warn/40 bg-bg-subtle text-warn"
-                  : "border-ok/30 bg-bg-subtle text-ok"
+                  : note.is_published
+                  ? "border-ok/30 bg-bg-subtle text-ok"
+                  : "border-accent/30 bg-bg-subtle text-accent"
               }`}
             >
-              {note.visibility}
+              {isPrivate
+                ? "private"
+                : note.is_published
+                ? "published"
+                : "public (desk)"}
             </span>
             <span className="text-text-muted">updated {updatedDate}</span>
             <NoteOwnerActions

@@ -258,12 +258,12 @@ export default function HomePage() {
           </button>
         </form>
 
-        {/* CATEGORY EXPLORER */}
-        {categories.length > 0 && (
+        {/* DESK CATEGORY EXPLORER (for signed-in user) */}
+        {user && categories.length > 0 && (
           <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-border pt-4 font-mono text-xs">
             <span className="mr-1 inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-text-muted">
               <FolderKanban className="h-3 w-3" />
-              Categories:
+              Your Desk:
             </span>
             <button
               type="button"
@@ -274,7 +274,7 @@ export default function HomePage() {
                   : "border-border bg-bg text-text-muted hover:border-border-strong hover:text-text"
               }`}
             >
-              All
+              All Books
             </button>
             {categories.map((cat) => (
               <button
@@ -381,7 +381,7 @@ export default function HomePage() {
           <div className="flex items-center justify-between border-b border-border pb-2.5">
             <h2 className="font-mono text-xs font-semibold uppercase tracking-wider text-text">
               {selectedCategory === "all"
-                ? "Public Documentation Books"
+                ? "Published Documentation Books"
                 : `Category: ${
                     categories.find((c) => c.slug === selectedCategory)?.name ||
                     selectedCategory
@@ -472,7 +472,7 @@ export default function HomePage() {
         <aside className="space-y-6">
           <section>
             <h2 className="mb-3 border-b border-border pb-2 font-mono text-xs font-semibold uppercase tracking-wider text-text">
-              Recently Updated Chapters
+              Published Chapters
             </h2>
             {recentPublic.length === 0 ? (
               <p className="rounded border border-dashed border-border p-4 font-mono text-xs text-text-muted">

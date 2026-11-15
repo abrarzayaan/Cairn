@@ -16,11 +16,17 @@ class CategoryCreateIn(BaseModel):
     description: str = Field(default="", max_length=200)
 
 
+class CategoryUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    description: str | None = Field(default=None, max_length=200)
+
+
 class BookCreateIn(BaseModel):
     title: str = Field(..., min_length=1, max_length=120)
     category_id: int | None = None
     description: str = Field(default="", max_length=400)
     visibility: str = Field(default="private", pattern="^(public|private)$")
+    is_published: bool = False
     slug: str | None = Field(default=None, max_length=140)
 
 
@@ -29,6 +35,7 @@ class BookUpdateIn(BaseModel):
     category_id: int | None = None
     description: str | None = Field(default=None, max_length=400)
     visibility: str | None = Field(default=None, pattern="^(public|private)$")
+    is_published: bool | None = None
     slug: str | None = Field(default=None, max_length=140)
 
 
@@ -42,6 +49,7 @@ class BookSummaryOut(BaseModel):
     slug: str
     description: str = ""
     visibility: str
+    is_published: bool = False
     moderation: str = "ok"
     moderation_note: str = ""
     author_username: str
@@ -57,6 +65,7 @@ class ChapterRefOut(BaseModel):
     slug: str
     sequence: int
     visibility: str
+    is_published: bool = False
     summary: str = ""
     updated_at: datetime
 
@@ -71,6 +80,7 @@ class NoteCreateIn(BaseModel):
     content_md: str = Field(default="", max_length=100000)
     tags: list[str] = Field(default_factory=list, max_length=5)
     visibility: str = Field(default="private", pattern="^(public|private)$")
+    is_published: bool = False
     slug: str | None = Field(default=None, max_length=140)
     book_id: int | None = None
     sequence: int | None = Field(default=None, ge=1)
@@ -81,6 +91,7 @@ class NoteUpdateIn(BaseModel):
     content_md: str | None = Field(default=None, max_length=100000)
     tags: list[str] | None = Field(default=None, max_length=5)
     visibility: str | None = Field(default=None, pattern="^(public|private)$")
+    is_published: bool | None = None
     slug: str | None = Field(default=None, max_length=140)
     book_id: int | None = None
     sequence: int | None = Field(default=None, ge=1)
@@ -99,6 +110,7 @@ class NoteOut(BaseModel):
     content_md: str
     content_html: str = ""
     visibility: str
+    is_published: bool = False
     moderation: str
     moderation_note: str = ""
     tags: list[str] = []
@@ -116,6 +128,7 @@ class NoteListItem(BaseModel):
     title: str
     slug: str
     visibility: str
+    is_published: bool = False
     tags: list[str] = []
     book_id: int | None = None
     book_title: str | None = None

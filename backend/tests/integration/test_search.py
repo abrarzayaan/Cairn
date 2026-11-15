@@ -27,6 +27,15 @@ def test_search_visibility_private_hidden_banned():
         content_md="Lexical scope in JS",
         tags=["javascript"],
         visibility="public",
+        is_published=True,
+    )
+    create_note(
+        author=alice,
+        title="Unpublished Closure Notes",
+        content_md="Rough draft for my eyes and profile only",
+        tags=["javascript"],
+        visibility="public",
+        is_published=False,
     )
     create_note(
         author=alice,
@@ -40,6 +49,7 @@ def test_search_visibility_private_hidden_banned():
         title="Hidden Closure",
         content_md="hidden_xyz",
         visibility="public",
+        is_published=True,
     )
     hidden_note.moderation = "hidden"
     hidden_note.save(update_fields=["moderation"])
@@ -49,24 +59,30 @@ def test_search_visibility_private_hidden_banned():
         title="Banned Closure",
         content_md="banned_xyz",
         visibility="public",
+        is_published=True,
     )
 
-    # Anonymous viewer only sees Public Closures
+    # Anonymous viewer only sees Published Closures (Unpublished is excluded from global search)
     anon_res = search_notes(None, q="Closure")
     anon_titles = [r["title"] for r in anon_res["results"]]
     assert anon_titles == ["Public Closures"]
 
-    # Bob cannot find Alice's private note by title, body, or tag
+    # Bob cannot find Alice's private note or unpublished note in global search
     bob_title_res = search_notes(bob, q="Secret Closure Diary")
     assert all(r["title"] != "Secret Closure Diary" for r in bob_title_res["results"])
     assert search_notes(bob, q="Secret Diary")["total"] == 0
     assert search_notes(bob, q="secret_token_xyz")["total"] == 0
     assert search_notes(bob, q="", tag="secret")["total"] == 0
 
-    # Alice DOES see her own private note, while banned author's note is excluded
-    alice_res = search_notes(alice, q="Closure")
+    unpub_res = search_notes(bob, q="Unpublished Closure Notes")
+    assert all(r["title"] != "Unpublished Closure Notes" for r in unpub_res["results"])
+    assert search_notes(bob, q="Unpublished")["total"] == 0
+
+    # Alice DOES see her own private and unpublished notes in scope=mine, while banned is excluded
+    alice_res = search_notes(alice, q="Closure", scope="mine")
     alice_titles = {r["title"] for r in alice_res["results"]}
     assert "Public Closures" in alice_titles
+    assert "Unpublished Closure Notes" in alice_titles
     assert "Secret Closure Diary" in alice_titles
     assert "Banned Closure" not in alice_titles
 
@@ -80,12 +96,14 @@ def test_search_typo_match_and_ranking():
         title="Unrelated Topic",
         content_md="Mentions closures once in the body.",
         visibility="public",
+        is_published=True,
     )
     create_note(
         author=alice,
         title="Closures",
         content_md="Remembering lexical environments.",
         visibility="public",
+        is_published=True,
     )
 
     # Typo query "closurs" matches "Closures"
@@ -108,6 +126,7 @@ def test_search_api_filters_and_pagination(api_client, client):
             content_md="Useful python note",
             tags=["python"],
             visibility="public",
+            is_published=True,
         )
     create_note(
         author=alice,
@@ -122,6 +141,7 @@ def test_search_api_filters_and_pagination(api_client, client):
         content_md="Bob note",
         tags=["python"],
         visibility="public",
+        is_published=True,
     )
 
     # Anonymous pagination with tag & author filter
@@ -154,6 +174,15 @@ def test_home_feed_and_profile_visibility(api_client, client):
         content_md="Public content",
         tags=["guide"],
         visibility="public",
+        is_published=True,
+    )
+    create_note(
+        author=alice,
+        title="Alice Profile Only Doc",
+        content_md="Public on profile but not published to global feed",
+        tags=["unpub-tag"],
+        visibility="public",
+        is_published=False,
     )
     create_note(
         author=alice,
@@ -163,7 +192,7 @@ def test_home_feed_and_profile_visibility(api_client, client):
         visibility="private",
     )
 
-    # Anonymous home feed only shows public note and public tags
+    # Anonymous home feed only shows published note and published tags
     anon_home = api_client.get("/api/v1/home")
     assert anon_home.status_code == 200
     home_data = anon_home.json()
@@ -171,19 +200,22 @@ def test_home_feed_and_profile_visibility(api_client, client):
     assert [t["name"] for t in home_data["topics"]] == ["guide"]
     assert home_data["my_notes"] == []
 
-    # Bob viewing Alice's profile only sees Alice's public note
+    # Bob viewing Alice's profile sees both published and profile-only public notes (but NOT private)
     _login_api_client(api_client, client, bob)
     bob_prof = api_client.get("/api/v1/users/alice_prof/profile")
     assert bob_prof.status_code == 200
     assert bob_prof.json()["is_self"] is False
-    assert [n["title"] for n in bob_prof.json()["notes"]] == ["Alice Public Guide"]
+    prof_titles = [n["title"] for n in bob_prof.json()["notes"]]
+    assert "Alice Public Guide" in prof_titles
+    assert "Alice Profile Only Doc" in prof_titles
+    assert "Alice Secret Note" not in prof_titles
 
-    # Alice viewing her own profile and home sees both
+    # Alice viewing her own profile and home sees everything
     _login_api_client(api_client, client, alice)
     alice_home = api_client.get("/api/v1/home")
     assert alice_home.status_code == 200
-    assert alice_home.json()["stats"] == {"total": 2, "public": 1, "private": 1}
+    assert alice_home.json()["stats"] == {"total": 3, "public": 2, "private": 1}
     alice_prof = api_client.get("/api/v1/users/alice_prof/profile")
     assert alice_prof.status_code == 200
     assert alice_prof.json()["is_self"] is True
-    assert len(alice_prof.json()["notes"]) == 2
+    assert len(alice_prof.json()["notes"]) == 3

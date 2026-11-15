@@ -5,13 +5,8 @@ from api.rate_limit import search_rate_limiter
 from apps.accounts.models import User
 from apps.moderation.services import hide_book, unhide_book
 from apps.notes.models import Book, Category, Note
-from apps.notes.services.books import ensure_preset_categories
+from apps.notes.services.books import ensure_starter_categories
 from apps.notes.services.notes import create_note
-
-
-@pytest.fixture(autouse=True)
-def _seed_categories(db):
-    ensure_preset_categories()
 
 
 def _auth_client(api_client, client, user) -> dict[str, str]:
@@ -26,27 +21,36 @@ def _auth_client(api_client, client, user) -> dict[str, str]:
 
 @pytest.mark.django_db(transaction=True)
 def test_categories_seeded_and_custom_creation(api_client, client):
-    """Preset categories are seeded and authenticated users can create custom categories."""
+    """Personal categories are seeded per-user desk and support CRUD with ownership isolation."""
+    # Unauthenticated without username gets empty list
     res = api_client.get("/api/v1/categories")
     assert res.status_code == 200
-    names = {c["name"] for c in res.json()}
-    assert {"Backend", "Frontend", "Database", "DevOps", "General"}.issubset(names)
+    assert res.json() == []
 
-    # Unauthenticated cannot create
+    # Unauthenticated cannot create category
     assert api_client.post("/api/v1/categories", json={"name": "Rust"}).status_code == 401
 
     user = User.objects.create_user(username="cat_dev", github_id=8101)
     headers = _auth_client(api_client, client, user)
 
+    # First call by authenticated user auto-seeds starter categories for their desk
+    res_auth = api_client.get("/api/v1/categories", headers=headers)
+    assert res_auth.status_code == 200
+    names = {c["name"] for c in res_auth.json()}
+    assert {"Backend", "Frontend", "Database", "DevOps", "General"}.issubset(names)
+
+    # Create custom category on own desk
     created = api_client.post(
         "/api/v1/categories",
         json={"name": "Distributed Systems", "description": "Consensus & replication"},
         headers=headers,
     )
     assert created.status_code == 201
-    assert created.json()["slug"] == "distributed-systems"
+    created_cat = created.json()
+    assert created_cat["slug"] == "distributed-systems"
+    cat_id = created_cat["id"]
 
-    # Case-insensitive duplicate rejected
+    # Case-insensitive duplicate rejected on the same user's desk
     dup = api_client.post(
         "/api/v1/categories",
         json={"name": "distributed systems"},
@@ -54,14 +58,100 @@ def test_categories_seeded_and_custom_creation(api_client, client):
     )
     assert dup.status_code == 400
 
+    # Another user can create a category with the same name on their own desk without conflict
+    user2 = User.objects.create_user(username="user_two", github_id=8102)
+    headers2 = _auth_client(api_client, client, user2)
+    created2 = api_client.post(
+        "/api/v1/categories",
+        json={"name": "Distributed Systems"},
+        headers=headers2,
+    )
+    assert created2.status_code == 201
+    assert created2.json()["slug"] == "distributed-systems"
+
+    # User2 cannot patch User's category
+    patch_forbidden = api_client.patch(
+        f"/api/v1/categories/{cat_id}",
+        json={"name": "Hacked Cat"},
+        headers=headers2,
+    )
+    assert patch_forbidden.status_code == 400
+
+    # Switch back to user: user can patch their own category
+    headers = _auth_client(api_client, client, user)
+    patched = api_client.patch(
+        f"/api/v1/categories/{cat_id}",
+        json={"name": "Distributed Consensus", "description": "Raft and Paxos"},
+        headers=headers,
+    )
+    assert patched.status_code == 200
+    assert patched.json()["name"] == "Distributed Consensus"
+    assert patched.json()["slug"] == "distributed-consensus"
+
+    # Renaming to existing name on own desk rejected
+    dup_rename = api_client.patch(
+        f"/api/v1/categories/{cat_id}",
+        json={"name": "Backend"},
+        headers=headers,
+    )
+    assert dup_rename.status_code == 400
+
+    # User2 cannot delete User's category
+    headers2 = _auth_client(api_client, client, user2)
+    del_forbidden = api_client.delete(
+        f"/api/v1/categories/{cat_id}",
+        headers=headers2,
+    )
+    assert del_forbidden.status_code == 400
+
+    # Deleting category containing books is rejected
+    headers = _auth_client(api_client, client, user)
+    backend_cat = Category.objects.get(author=user, slug="backend")
+    Book.objects.create(
+        author=user,
+        category=backend_cat,
+        title="Sample Book",
+        slug="sample-book",
+        visibility="public",
+    )
+    del_with_books = api_client.delete(
+        f"/api/v1/categories/{backend_cat.id}",
+        headers=headers,
+    )
+    assert del_with_books.status_code == 400
+
+    # Deleting empty category succeeds
+    del_empty = api_client.delete(
+        f"/api/v1/categories/{cat_id}",
+        headers=headers,
+    )
+    assert del_empty.status_code == 200
+
+    # Querying desk categories via ?username=cat_dev by user2 only shows categories with visible books
+    headers2 = _auth_client(api_client, client, user2)
+    desk_public = api_client.get(f"/api/v1/categories?username={user.username}", headers=headers2)
+    assert desk_public.status_code == 200
+    public_cats = desk_public.json()
+    assert len(public_cats) == 1
+    assert public_cats[0]["slug"] == "backend"
+    assert public_cats[0]["book_count"] == 1
+
+    # Owner querying own desk categories sees all remaining categories (8 starters - 0 deleted + custom was deleted = 8)
+    headers = _auth_client(api_client, client, user)
+    desk_owner = api_client.get(f"/api/v1/categories?username={user.username}", headers=headers)
+    assert desk_owner.status_code == 200
+    assert len(desk_owner.json()) == 8
+
 
 @pytest.mark.django_db(transaction=True)
 def test_book_crud_chapters_sequence_and_reorder(api_client, client):
     """Books support sequential chapters, prev/next navigation, reordering, and safe detach on delete."""
-    user = User.objects.create_user(username="book_dev", github_id=8102, bio="Backend engineer")
+    user = User.objects.create_user(username="book_dev", github_id=8103, bio="Backend engineer")
     headers = _auth_client(api_client, client, user)
 
-    backend_cat = Category.objects.get(slug="backend")
+    # Seed starter categories for user
+    ensure_starter_categories(user)
+    backend_cat = Category.objects.get(author=user, slug="backend")
     book_res = api_client.post(
         "/api/v1/books",
         json={
@@ -69,6 +159,7 @@ def test_book_crud_chapters_sequence_and_reorder(api_client, client):
             "category_id": backend_cat.id,
             "description": "Deep dive into MVCC, WAL, and indexing.",
             "visibility": "public",
+            "is_published": True,
         },
         headers=headers,
     )
@@ -77,21 +168,22 @@ def test_book_crud_chapters_sequence_and_reorder(api_client, client):
     book_id = book_data["id"]
     assert book_data["slug"] == "postgresql-internals"
     assert book_data["category"]["slug"] == "backend"
+    assert book_data["is_published"] is True
 
     # Create 3 chapters without explicit sequence -> auto 1, 2, 3
     ch1 = api_client.post(
         "/api/v1/notes",
-        json={"title": "Page Layout", "content_md": "# Pages", "visibility": "public", "book_id": book_id},
+        json={"title": "Page Layout", "content_md": "# Pages", "visibility": "public", "is_published": True, "book_id": book_id},
         headers=headers,
     )
     ch2 = api_client.post(
         "/api/v1/notes",
-        json={"title": "MVCC & Tuples", "content_md": "# MVCC", "visibility": "public", "book_id": book_id},
+        json={"title": "MVCC & Tuples", "content_md": "# MVCC", "visibility": "public", "is_published": True, "book_id": book_id},
         headers=headers,
     )
     ch3 = api_client.post(
         "/api/v1/notes",
-        json={"title": "Write-Ahead Log", "content_md": "# WAL", "visibility": "public", "book_id": book_id},
+        json={"title": "Write-Ahead Log", "content_md": "# WAL", "visibility": "public", "is_published": True, "book_id": book_id},
         headers=headers,
     )
     assert ch1.status_code == 201 and ch1.json()["sequence"] == 1
@@ -143,11 +235,12 @@ def test_book_crud_chapters_sequence_and_reorder(api_client, client):
 
 @pytest.mark.django_db(transaction=True)
 def test_private_book_hides_public_chapters_everywhere(api_client, client):
-    """Chapters marked public inside a private book stay invisible (404) to non-owners."""
+    """Private books keep chapters hidden; public but unpublished books stay off global search."""
     search_rate_limiter.reset()
-    owner = User.objects.create_user(username="priv_owner", github_id=8103)
-    stranger = User.objects.create_user(username="priv_stranger", github_id=8104)
-    cat = Category.objects.get(slug="systems")
+    owner = User.objects.create_user(username="priv_owner", github_id=8104)
+    stranger = User.objects.create_user(username="priv_stranger", github_id=8105)
+    ensure_starter_categories(owner)
+    cat = Category.objects.get(author=owner, slug="systems")
 
     priv_book = Book.objects.create(
         author=owner,
@@ -155,6 +248,7 @@ def test_private_book_hides_public_chapters_everywhere(api_client, client):
         title="Secret Architecture Book",
         slug="secret-arch",
         visibility="private",
+        is_published=False,
     )
     chapter = create_note(
         author=owner,
@@ -162,6 +256,7 @@ def test_private_book_hides_public_chapters_everywhere(api_client, client):
         content_md="Secret token exchange details",
         tags=["security"],
         visibility="public",
+        is_published=False,
         book_id=priv_book.id,
         sequence=1,
     )
@@ -170,6 +265,7 @@ def test_private_book_hides_public_chapters_everywhere(api_client, client):
         title="Draft Keys",
         content_md="Draft only",
         visibility="private",
+        is_published=False,
         book_id=priv_book.id,
         sequence=2,
     )
@@ -199,24 +295,52 @@ def test_private_book_hides_public_chapters_everywhere(api_client, client):
     assert len(owner_toc.json()["chapters"]) == 2
     assert api_client.get(f"/api/v1/notes/by-slug/{owner.username}/{chapter.slug}").status_code == 200
 
-    # Flip book to public -> public chapter is visible, private chapter remains hidden from stranger
+    # Flip book to public, but KEEP unpublished (is_published=False)
     priv_book.visibility = "public"
     priv_book.save(update_fields=["visibility"])
 
+    # Stranger sees public book and chapter on profile and direct link
     _auth_client(api_client, client, stranger)
     pub_toc = api_client.get(f"/api/v1/books/by-slug/{owner.username}/{priv_book.slug}")
     assert pub_toc.status_code == 200
     assert [c["slug"] for c in pub_toc.json()["chapters"]] == [chapter.slug]
     assert api_client.get(f"/api/v1/notes/by-slug/{owner.username}/{priv_chapter.slug}").status_code == 404
 
+    prof_pub = api_client.get(f"/api/v1/users/{owner.username}/profile").json()
+    assert len(prof_pub["books"]) == 1
+    assert prof_pub["books"][0]["slug"] == priv_book.slug
+
+    # BUT unpublished doc is STILL excluded from global search and home feed!
+    search_unpub = api_client.get("/api/v1/search?q=Internal").json()
+    assert search_unpub["results"] == []
+    assert search_unpub["books"] == []
+
+    # Once published, it appears in global search and discovers author's profile
+    priv_book.is_published = True
+    priv_book.save(update_fields=["is_published"])
+    chapter.is_published = True
+    chapter.save(update_fields=["is_published"])
+
+    # Chapter search finds the note and discovers author
+    search_pub = api_client.get("/api/v1/search?q=Internal").json()
+    assert len(search_pub["results"]) == 1
+    assert search_pub["results"][0]["slug"] == chapter.slug
+    assert any(u["username"] == owner.username for u in search_pub["users"])
+
+    # Book search finds the published book
+    search_book = api_client.get("/api/v1/search?q=Architecture").json()
+    assert len(search_book["books"]) == 1
+    assert search_book["books"][0]["slug"] == priv_book.slug
+
 
 @pytest.mark.django_db(transaction=True)
 def test_unified_search_and_book_moderation(api_client, client):
-    """Unified search finds books, chapters, categories, and users; hidden books hide chapters."""
+    """Unified search finds published books, chapters, and discovers authors by topic; moderation hides properly."""
     search_rate_limiter.reset()
-    dev = User.objects.create_user(username="redis_guru", github_id=8105, bio="Distributed cache docs")
-    other = User.objects.create_user(username="reader_one", github_id=8106)
-    db_cat = Category.objects.get(slug="database")
+    dev = User.objects.create_user(username="redis_guru", github_id=8106, bio="Distributed cache docs")
+    other = User.objects.create_user(username="reader_one", github_id=8107)
+    ensure_starter_categories(dev)
+    db_cat = Category.objects.get(author=dev, slug="database")
 
     book = Book.objects.create(
         author=dev,
@@ -225,16 +349,18 @@ def test_unified_search_and_book_moderation(api_client, client):
         slug="redis-cluster-guide",
         description="Sharding and failover patterns",
         visibility="public",
+        is_published=True,
     )
     ch = create_note(
         author=dev,
         title="Redis Hash Slots",
         content_md="16384 hash slots across master nodes.",
         visibility="public",
+        is_published=True,
         book_id=book.id,
     )
 
-    # Unified search matches book, note, and user
+    # Unified search matches published book, note, and author profile
     res_all = api_client.get("/api/v1/search?q=redis").json()
     assert len(res_all["books"]) == 1
     assert res_all["books"][0]["slug"] == "redis-cluster-guide"
@@ -250,11 +376,11 @@ def test_unified_search_and_book_moderation(api_client, client):
     assert cat_miss["books"] == []
     assert cat_miss["results"] == []
 
-    # Type filter for categories
-    cats_only = api_client.get("/api/v1/search?q=database&type=categories").json()
-    assert any(c["slug"] == "database" for c in cats_only["categories"])
-    assert cats_only["books"] == []
-    assert cats_only["results"] == []
+    # Category search scoped to author's desk
+    cats_author = api_client.get(f"/api/v1/search?q=database&type=categories&author={dev.username}").json()
+    assert any(c["slug"] == "database" for c in cats_author["categories"])
+    assert cats_author["books"] == []
+    assert cats_author["results"] == []
 
     # Moderation hide_book hides both book and its chapter from non-owners
     hide_book(book, "Spam link in description")
@@ -273,4 +399,3 @@ def test_unified_search_and_book_moderation(api_client, client):
     unhide_book(book)
     _auth_client(api_client, client, other)
     assert api_client.get(f"/api/v1/books/by-slug/{dev.username}/{book.slug}").status_code == 200
-

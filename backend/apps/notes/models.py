@@ -15,17 +15,36 @@ class Tag(models.Model):
 
 
 class Category(models.Model):
-    name = models.CharField(max_length=60, unique=True)
-    slug = models.CharField(max_length=70, unique=True)
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="categories",
+    )
+    name = models.CharField(max_length=60)
+    slug = models.CharField(max_length=70)
     description = models.CharField(max_length=200, default="", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "categories"
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["author", "slug"],
+                name="categories_author_slug_unique",
+            ),
+            models.UniqueConstraint(
+                "author",
+                Lower("name"),
+                name="categories_author_name_lower_idx",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["author", "name"], name="categories_author_idx"),
+        ]
 
     def __str__(self):
-        return self.name
+        return f"{self.name} (@{self.author.username})"
 
 
 class Book(models.Model):
@@ -56,6 +75,7 @@ class Book(models.Model):
         default="private",
         choices=VISIBILITY_CHOICES,
     )
+    is_published = models.BooleanField(default=False)
     moderation = models.CharField(
         max_length=10,
         default="ok",
@@ -77,6 +97,10 @@ class Book(models.Model):
                 name="books_visibility_check",
             ),
             models.CheckConstraint(
+                condition=models.Q(visibility="public") | models.Q(is_published=False),
+                name="books_published_requires_public_check",
+            ),
+            models.CheckConstraint(
                 condition=models.Q(moderation__in=["ok", "hidden"]),
                 name="books_moderation_check",
             ),
@@ -84,6 +108,11 @@ class Book(models.Model):
         indexes = [
             models.Index(fields=["author", "-updated_at"], name="books_author_idx"),
             models.Index(fields=["category", "-updated_at"], name="books_category_idx"),
+            models.Index(
+                fields=["-updated_at"],
+                name="books_published_idx",
+                condition=models.Q(visibility="public", is_published=True, moderation="ok"),
+            ),
         ]
 
     def __str__(self):
@@ -123,6 +152,7 @@ class Note(models.Model):
         default="private",
         choices=VISIBILITY_CHOICES,
     )
+    is_published = models.BooleanField(default=False)
     moderation = models.CharField(
         max_length=10,
         default="ok",
@@ -157,6 +187,10 @@ class Note(models.Model):
                 name="notes_visibility_check",
             ),
             models.CheckConstraint(
+                condition=models.Q(visibility="public") | models.Q(is_published=False),
+                name="notes_published_requires_public_check",
+            ),
+            models.CheckConstraint(
                 condition=models.Q(moderation__in=["ok", "hidden"]),
                 name="notes_moderation_check",
             ),
@@ -168,6 +202,11 @@ class Note(models.Model):
                 fields=["-updated_at"],
                 name="notes_public_idx",
                 condition=models.Q(visibility="public", moderation="ok"),
+            ),
+            models.Index(
+                fields=["-updated_at"],
+                name="notes_published_idx",
+                condition=models.Q(visibility="public", is_published=True, moderation="ok"),
             ),
         ]
 

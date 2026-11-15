@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { FolderPlus } from "lucide-react";
 import CreateBookModal from "@/components/CreateBookModal";
 import MarkdownEditor, {
   MarkdownEditorHandle,
@@ -11,6 +12,7 @@ import NoteContent from "@/components/NoteContent";
 import {
   BookSummary,
   Category,
+  createCategory,
   createNote,
   deleteNote,
   fetchCategories,
@@ -34,6 +36,7 @@ interface NoteEditorProps {
 }
 
 type ViewMode = "write" | "split" | "preview";
+type AccessState = "private" | "public_desk" | "published";
 
 const TEMPLATES: Record<string, { title?: string; tags: string; body: string }> = {
   concept: {
@@ -74,7 +77,7 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
   const [title, setTitle] = useState("");
   const [noteSlug, setNoteSlug] = useState("");
   const [tagsInput, setTagsInput] = useState("");
-  const [visibility, setVisibility] = useState<"public" | "private">("private");
+  const [accessState, setAccessState] = useState<AccessState>("private");
   const [contentMd, setContentMd] = useState("");
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -83,6 +86,10 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
   const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
   const [sequence, setSequence] = useState<number>(1);
   const [bookModalOpen, setBookModalOpen] = useState(false);
+
+  const [addingCat, setAddingCat] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [catBusy, setCatBusy] = useState(false);
 
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -157,7 +164,13 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
             setSelectedBookId(matched.id);
             setCategoryFilterId(matched.category.id);
             setSequence((matched.chapter_count || 0) + 1);
-            setVisibility(matched.visibility);
+            if (matched.visibility === "private") {
+              setAccessState("private");
+            } else if (matched.is_published) {
+              setAccessState("published");
+            } else {
+              setAccessState("public_desk");
+            }
           }
         }
       }
@@ -171,7 +184,13 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
             setTitle(note.title);
             setNoteSlug(note.slug);
             setTagsInput(note.tags.join(" "));
-            setVisibility(note.visibility);
+            if (note.visibility === "private") {
+              setAccessState("private");
+            } else if (note.is_published) {
+              setAccessState("published");
+            } else {
+              setAccessState("public_desk");
+            }
             setContentMd(note.content_md);
             setSelectedBookId(note.book ? note.book.id : null);
             if (note.book) {
@@ -240,6 +259,24 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
     };
   }, [contentMd, loading, authError, viewMode]);
 
+  const handleCreateCategory = async () => {
+    if (!newCatName.trim() || catBusy) return;
+    setCatBusy(true);
+    setErrorMsg(null);
+    try {
+      const cat = await createCategory({ name: newCatName.trim() });
+      const next = [...categories, cat].sort((a, b) => a.name.localeCompare(b.name));
+      setCategories(next);
+      setCategoryFilterId(cat.id);
+      setNewCatName("");
+      setAddingCat(false);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to create category");
+    } finally {
+      setCatBusy(false);
+    }
+  };
+
   const handleSave = useCallback(
     async (andView = false) => {
       if (saving) return;
@@ -252,6 +289,8 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
       setSaving(true);
       setErrorMsg(null);
       const parsedTags = parseTagsInput(tagsInput);
+      const visibility = accessState === "private" ? "private" : "public";
+      const is_published = accessState === "published";
 
       try {
         let saved;
@@ -261,6 +300,7 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
             content_md: contentMd,
             tags: parsedTags,
             visibility,
+            is_published,
             slug: noteSlug.trim() || undefined,
             book_id: selectedBookId,
             sequence: selectedBookId ? Math.max(1, sequence) : 1,
@@ -290,6 +330,7 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
             content_md: contentMd,
             tags: parsedTags,
             visibility,
+            is_published,
             slug: noteSlug.trim() || undefined,
             book_id: selectedBookId,
             sequence: selectedBookId ? Math.max(1, sequence) : 1,
@@ -327,7 +368,7 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
       tagsInput,
       noteId,
       contentMd,
-      visibility,
+      accessState,
       noteSlug,
       router,
       slug,
@@ -647,29 +688,61 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
             </div>
 
             <div>
-              <label
-                htmlFor="note-category-filter"
-                className="mb-1 block font-mono text-xs text-text-muted"
-              >
-                Topic Category
-              </label>
-              <select
-                id="note-category-filter"
-                value={categoryFilterId}
-                onChange={(e) =>
-                  setCategoryFilterId(
-                    e.target.value === "all" ? "all" : Number(e.target.value)
-                  )
-                }
-                className="w-full rounded border border-border-strong bg-bg px-2.5 py-1.5 text-xs text-text focus:border-accent focus:outline-none"
-              >
-                <option value="all">All Categories</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <div className="mb-1 flex items-center justify-between">
+                <label
+                  htmlFor="note-category-filter"
+                  className="font-mono text-xs text-text-muted"
+                >
+                  Topic Category
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setAddingCat((v) => !v)}
+                  className="inline-flex items-center gap-1 font-mono text-[11px] text-accent hover:underline"
+                >
+                  <FolderPlus className="h-3 w-3" />
+                  {addingCat ? "Cancel" : "+ New Category"}
+                </button>
+              </div>
+
+              {addingCat ? (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newCatName}
+                    onChange={(e) => setNewCatName(e.target.value)}
+                    placeholder="e.g. Distributed Systems"
+                    maxLength={60}
+                    className="flex-1 rounded border border-border-strong bg-bg px-2.5 py-1 font-mono text-xs text-text focus:border-accent focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={catBusy}
+                    onClick={handleCreateCategory}
+                    className="rounded border border-border-strong bg-bg-subtle px-2.5 py-1 font-mono text-xs text-text hover:border-accent"
+                  >
+                    Add
+                  </button>
+                </div>
+              ) : (
+                <select
+                  id="note-category-filter"
+                  value={categoryFilterId}
+                  onChange={(e) =>
+                    setCategoryFilterId(
+                      e.target.value === "all" ? "all" : Number(e.target.value)
+                    )
+                  }
+                  className="w-full rounded border border-border-strong bg-bg px-2.5 py-1.5 text-xs text-text focus:border-accent focus:outline-none"
+                >
+                  <option value="all">All Categories</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div>
@@ -810,38 +883,60 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
 
             <div>
               <span className="mb-1.5 block font-mono text-xs text-text-muted">
-                Visibility
+                Access &amp; Publishing
               </span>
-              <div className="grid grid-cols-2 rounded border border-border-strong bg-bg-subtle p-0.5 font-mono text-xs">
+              <div className="grid grid-cols-3 rounded border border-border-strong bg-bg-subtle p-0.5 font-mono text-xs">
                 <button
                   type="button"
                   onClick={() => {
-                    setVisibility("private");
+                    setAccessState("private");
                     setDirty(true);
                   }}
-                  className={`rounded py-1 transition-colors ${
-                    visibility === "private"
+                  className={`rounded py-1.5 text-center transition-colors ${
+                    accessState === "private"
                       ? "bg-bg text-warn font-semibold shadow-sm"
                       : "text-text-muted hover:text-text"
                   }`}
+                  title="Only visible to you on your personal desk"
                 >
                   Private
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setVisibility("public");
+                    setAccessState("public_desk");
                     setDirty(true);
                   }}
-                  className={`rounded py-1 transition-colors ${
-                    visibility === "public"
+                  className={`rounded py-1.5 text-center transition-colors ${
+                    accessState === "public_desk"
+                      ? "bg-bg text-accent font-semibold shadow-sm"
+                      : "text-text-muted hover:text-text"
+                  }`}
+                  title="Public on your profile desk & direct link (hidden from global search)"
+                >
+                  Desk Only
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccessState("published");
+                    setDirty(true);
+                  }}
+                  className={`rounded py-1.5 text-center transition-colors ${
+                    accessState === "published"
                       ? "bg-bg text-ok font-semibold shadow-sm"
                       : "text-text-muted hover:text-text"
                   }`}
+                  title="Globally indexed and searchable by all developers"
                 >
-                  Public
+                  Published
                 </button>
               </div>
+              <p className="mt-1.5 font-mono text-[11px] text-text-muted">
+                {accessState === "private" && "Only visible to you on your personal desk."}
+                {accessState === "public_desk" && "Public on your desk profile & direct link (hidden from global search)."}
+                {accessState === "published" && "Globally indexed and searchable across Cairn."}
+              </p>
             </div>
           </section>
 
@@ -1043,7 +1138,13 @@ export default function NoteEditor({ mode, username, slug }: NoteEditorProps) {
           setSelectedBookId(createdBook.id);
           if (noteId === null) {
             setSequence(1);
-            setVisibility(createdBook.visibility);
+            if (createdBook.visibility === "private") {
+              setAccessState("private");
+            } else if (createdBook.is_published) {
+              setAccessState("published");
+            } else {
+              setAccessState("public_desk");
+            }
           }
           setDirty(true);
         }}

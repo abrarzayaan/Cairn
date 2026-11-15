@@ -125,8 +125,8 @@ class UserAdmin(admin.ModelAdmin):
 
 
 class NoteAdmin(admin.ModelAdmin):
-    list_display = ("title", "author", "visibility", "moderation", "updated_at")
-    list_filter = ("visibility", "moderation", "updated_at")
+    list_display = ("title", "author", "book", "sequence", "visibility", "is_published", "moderation", "updated_at")
+    list_filter = ("visibility", "is_published", "moderation", "updated_at")
     search_fields = ("title", "slug", "author__username")
     readonly_fields = ("created_at", "updated_at")
     actions = ("action_hide_notes", "action_unhide_notes")
@@ -134,9 +134,12 @@ class NoteAdmin(admin.ModelAdmin):
     def get_fields(self, request, obj=None):
         fields = [
             "author",
+            "book",
+            "sequence",
             "title",
             "slug",
             "visibility",
+            "is_published",
             "moderation",
             "moderation_note",
             "created_at",
@@ -144,7 +147,7 @@ class NoteAdmin(admin.ModelAdmin):
         ]
         # Never expose private note content in admin (SECURITY_CHECK.md)
         if obj is None or obj.visibility == "public":
-            fields.insert(3, "content_md")
+            fields.insert(5, "content_md")
         return fields
 
     @admin.action(description="Hide selected notes (with reason)")
@@ -237,8 +240,9 @@ class TagAdmin(admin.ModelAdmin):
 
 
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug", "books_count", "created_at")
-    search_fields = ("name", "slug")
+    list_display = ("name", "slug", "author", "books_count", "created_at")
+    list_filter = ("author", "created_at")
+    search_fields = ("name", "slug", "author__username")
     readonly_fields = ("created_at",)
 
     def get_queryset(self, request):
@@ -250,8 +254,8 @@ class CategoryAdmin(admin.ModelAdmin):
 
 
 class BookAdmin(admin.ModelAdmin):
-    list_display = ("title", "category", "author", "visibility", "moderation", "updated_at")
-    list_filter = ("visibility", "moderation", "category", "updated_at")
+    list_display = ("title", "category", "author", "visibility", "is_published", "moderation", "updated_at")
+    list_filter = ("visibility", "is_published", "moderation", "updated_at")
     search_fields = ("title", "slug", "author__username", "category__name")
     readonly_fields = ("created_at", "updated_at")
     actions = ("action_hide_books", "action_unhide_books")
@@ -263,6 +267,7 @@ class BookAdmin(admin.ModelAdmin):
             "title",
             "slug",
             "visibility",
+            "is_published",
             "moderation",
             "moderation_note",
             "created_at",

@@ -25,7 +25,7 @@ TAG_REGEX = re.compile(r"^[a-z0-9-]+$")
 
 
 def visible_books_q(viewer) -> Q:
-    """Single source of truth for book visibility across all queries.
+    """Single source of truth for book visibility across direct viewing and profile pages.
 
     A book is visible if:
     1. It is public, moderation is 'ok', and its author is not banned, OR
@@ -42,7 +42,7 @@ def visible_books_q(viewer) -> Q:
 
 
 def visible_notes_q(viewer) -> Q:
-    """Single source of truth for note visibility across all queries.
+    """Single source of truth for note visibility across direct viewing and profile pages.
 
     A note is visible if:
     1. It is public, moderation is 'ok', its author is not banned, AND
@@ -60,6 +60,44 @@ def visible_notes_q(viewer) -> Q:
     if viewer and viewer.is_authenticated:
         return public_q | Q(author_id=viewer.id)
     return public_q
+
+
+def published_books_q() -> Q:
+    """Single source of truth for globally discoverable published books.
+
+    A book is published if:
+    - visibility = 'public'
+    - is_published = True
+    - moderation = 'ok'
+    - author is not banned
+    """
+    return Q(
+        visibility="public",
+        is_published=True,
+        moderation="ok",
+        author__is_banned=False,
+    )
+
+
+def published_notes_q() -> Q:
+    """Single source of truth for globally discoverable published notes/chapters.
+
+    A note is published if:
+    - visibility = 'public'
+    - is_published = True
+    - moderation = 'ok'
+    - author is not banned
+    - (if assigned to a book) that book is public, published, and not hidden
+    """
+    return Q(
+        visibility="public",
+        is_published=True,
+        moderation="ok",
+        author__is_banned=False,
+    ) & (
+        Q(book__isnull=True)
+        | Q(book__visibility="public", book__is_published=True, book__moderation="ok")
+    )
 
 
 def normalize_tag(name: str) -> str:
@@ -121,11 +159,12 @@ def create_note(
     content_md: str = "",
     tags: list[str] | None = None,
     visibility: str = "private",
+    is_published: bool = False,
     custom_slug: str | None = None,
     book_id: int | None = None,
     sequence: int | None = None,
 ) -> Note:
-    """Create a new note with slug, optional book/sequence, and initial revision."""
+    """Create a new note with slug, optional book/sequence, publish state, and initial revision."""
     title_clean = title.strip()
     if not title_clean or len(title_clean) > 120:
         raise ValidationError("Title is required and must be 120 characters or fewer.")
@@ -135,6 +174,11 @@ def create_note(
 
     if visibility not in ("public", "private"):
         raise ValidationError("Visibility must be 'public' or 'private'.")
+
+    if visibility == "private" and is_published:
+        raise ValidationError("Private notes cannot be published.")
+
+    resolved_published = is_published if visibility == "public" else False
 
     if sequence is not None and sequence < 1:
         raise ValidationError("Sequence must be 1 or greater.")
@@ -173,6 +217,7 @@ def create_note(
             content_html=content_html,
             summary=summary,
             visibility=visibility,
+            is_published=resolved_published,
         )
 
         if tags:
@@ -198,11 +243,12 @@ def update_note(
     content_md: str | None = None,
     tags: list[str] | None = None,
     visibility: str | None = None,
+    is_published: bool | None = None,
     custom_slug: str | None = None,
     book_id: Any = _UNSET,
     sequence: int | None = None,
 ) -> Note:
-    """Update note fields, slug history if slug changes, and revision if content changes."""
+    """Update note fields, slug history if slug changes, publish state, and revision if content changes."""
     note = (
         Note.objects.select_for_update()
         .select_related("author", "book", "book__category")
@@ -272,6 +318,15 @@ def update_note(
             if visibility not in ("public", "private"):
                 raise ValidationError("Visibility must be 'public' or 'private'.")
             note.visibility = visibility
+
+        if is_published is not None:
+            if is_published and note.visibility != "public":
+                raise ValidationError("Private notes cannot be published.")
+            note.is_published = bool(is_published)
+
+        # Enforce invariant: private notes can NEVER be published
+        if note.visibility == "private":
+            note.is_published = False
 
         if content_md is not None:
             if len(content_md) > 100000:

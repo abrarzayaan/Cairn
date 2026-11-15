@@ -18,17 +18,33 @@ PRESET_CATEGORIES = [
 ]
 
 
-def ensure_preset_categories() -> None:
-    """Seed preset topic categories idempotently if missing."""
+def ensure_starter_categories(user) -> list[Category]:
+    """Seed starter personal categories for a user's desk if they have none."""
+    if not user or not user.is_authenticated:
+        return []
+    cats = []
     for name, slug, description in PRESET_CATEGORIES:
-        Category.objects.get_or_create(
+        cat, _ = Category.objects.get_or_create(
+            author=user,
             slug=slug,
             defaults={"name": name, "description": description},
         )
+        cats.append(cat)
+    return cats
 
 
-def create_category(name: str, description: str = "") -> Category:
-    """Create a topic category with a unique slug, or raise ValidationError on conflict."""
+def ensure_preset_categories() -> None:
+    """Backwards-compatible helper: ensures starter categories exist for all existing users."""
+    from apps.accounts.models import User
+    for u in User.objects.all():
+        ensure_starter_categories(u)
+
+
+def create_category(author, name: str, description: str = "") -> Category:
+    """Create a personal topic category scoped to the author's desk."""
+    if not author or not author.is_authenticated:
+        raise ValidationError("Authentication required to create a category.")
+
     clean_name = " ".join(name.strip().split())
     if not clean_name or len(clean_name) > 60:
         raise ValidationError("Category name is required and must be 60 characters or fewer.")
@@ -41,28 +57,108 @@ def create_category(name: str, description: str = "") -> Category:
     if not slug:
         raise ValidationError("Category name must contain letters or numbers.")
 
-    if Category.objects.filter(Q(name__iexact=clean_name) | Q(slug=slug)).exists():
-        raise ValidationError("A category with this name already exists.")
+    if Category.objects.filter(author=author).filter(Q(name__iexact=clean_name) | Q(slug=slug)).exists():
+        raise ValidationError("A category with this name already exists on your desk.")
 
     return Category.objects.create(
+        author=author,
         name=clean_name,
         slug=slug,
         description=clean_desc,
     )
 
 
-def list_categories_with_counts(viewer) -> list[dict]:
-    """Return all categories ordered by name with visible book counts."""
-    if not Category.objects.exists():
-        ensure_preset_categories()
+def update_category(
+    author,
+    category_id: int,
+    name: str | None = None,
+    description: str | None = None,
+) -> Category:
+    """Update a personal category owned by the author."""
+    category = Category.objects.filter(id=category_id, author=author).first()
+    if not category:
+        raise ValidationError("Category not found on your desk.")
 
-    visible_book_filter = Q(books__visibility="public", books__moderation="ok", books__author__is_banned=False)
-    if viewer and viewer.is_authenticated:
-        visible_book_filter = visible_book_filter | Q(books__author_id=viewer.id)
+    if name is not None:
+        clean_name = " ".join(name.strip().split())
+        if not clean_name or len(clean_name) > 60:
+            raise ValidationError("Category name is required and must be 60 characters or fewer.")
+        slug = slugify(clean_name)[:70]
+        if not slug:
+            raise ValidationError("Category name must contain letters or numbers.")
+        if (
+            Category.objects.filter(author=author)
+            .filter(Q(name__iexact=clean_name) | Q(slug=slug))
+            .exclude(id=category.id)
+            .exists()
+        ):
+            raise ValidationError("A category with this name already exists on your desk.")
+        category.name = clean_name
+        category.slug = slug
 
-    categories = Category.objects.annotate(
+    if description is not None:
+        clean_desc = description.strip()
+        if len(clean_desc) > 200:
+            raise ValidationError("Description must be 200 characters or fewer.")
+        category.description = clean_desc
+
+    category.save()
+    return category
+
+
+def delete_category(author, category_id: int) -> bool:
+    """Delete a personal category if it contains no books."""
+    category = Category.objects.filter(id=category_id, author=author).first()
+    if not category:
+        raise ValidationError("Category not found on your desk.")
+
+    if category.books.exists():
+        raise ValidationError("Cannot delete category containing books. Reassign or delete its books first.")
+
+    category.delete()
+    return True
+
+
+def list_categories_with_counts(viewer, username: str | None = None) -> list[dict]:
+    """Return personal categories with visible book counts.
+
+    - If username provided: lists that user's visible categories (hiding private-only categories for others).
+    - If no username: lists viewer's own desk categories (seeds starters if empty).
+    """
+    from apps.accounts.models import User
+
+    target_user = None
+    if username and username.strip():
+        clean_username = username.strip().lstrip("@")
+        target_user = User.objects.filter(username__iexact=clean_username, is_banned=False).first()
+        if not target_user:
+            return []
+    elif viewer and viewer.is_authenticated:
+        target_user = viewer
+    else:
+        return []
+
+    is_owner = bool(viewer and viewer.is_authenticated and viewer.id == target_user.id)
+
+    # Seed starter categories for own desk if none exist
+    if is_owner and not Category.objects.filter(author=target_user).exists():
+        ensure_starter_categories(target_user)
+
+    visible_book_filter = Q(
+        books__visibility="public",
+        books__moderation="ok",
+        books__author__is_banned=False,
+    )
+    if is_owner:
+        visible_book_filter = visible_book_filter | Q(books__author_id=target_user.id)
+
+    qs = Category.objects.filter(author=target_user).annotate(
         book_count=Count("books", filter=visible_book_filter, distinct=True),
     ).order_by("name")
+
+    # Non-owners must NEVER see empty categories or categories with only private books
+    if not is_owner:
+        qs = qs.filter(book_count__gt=0)
 
     return [
         {
@@ -72,7 +168,7 @@ def list_categories_with_counts(viewer) -> list[dict]:
             "description": cat.description,
             "book_count": cat.book_count,
         }
-        for cat in categories
+        for cat in qs
     ]
 
 
@@ -108,9 +204,10 @@ def create_book(
     category_id: int | None = None,
     description: str = "",
     visibility: str = "private",
+    is_published: bool = False,
     custom_slug: str | None = None,
 ) -> Book:
-    """Create a documentation book under a category."""
+    """Create a documentation book under a personal category on author's desk."""
     clean_title = title.strip()
     if not clean_title or len(clean_title) > 120:
         raise ValidationError("Book title is required and must be 120 characters or fewer.")
@@ -122,17 +219,22 @@ def create_book(
     if visibility not in ("public", "private"):
         raise ValidationError("Visibility must be 'public' or 'private'.")
 
+    if visibility == "private" and is_published:
+        raise ValidationError("Private books cannot be published.")
+
+    resolved_published = is_published if visibility == "public" else False
+
     if category_id is not None:
-        category = Category.objects.filter(id=category_id).first()
+        category = Category.objects.filter(id=category_id, author=author).first()
         if not category:
-            raise ValidationError("Category not found.")
+            raise ValidationError("Category not found on your desk.")
     else:
-        category = Category.objects.filter(slug="general").first()
+        category = Category.objects.filter(author=author, slug="general").first()
         if not category:
-            ensure_preset_categories()
-            category = Category.objects.filter(slug="general").first()
+            ensure_starter_categories(author)
+            category = Category.objects.filter(author=author, slug="general").first()
         if not category:
-            raise ValidationError("Category is required.")
+            category = Category.objects.create(author=author, name="General", slug="general")
 
     if Book.objects.filter(author=author, title__iexact=clean_title).exists():
         raise ValidationError("You already have a book with this title.")
@@ -145,6 +247,7 @@ def create_book(
         slug=slug,
         description=clean_desc,
         visibility=visibility,
+        is_published=resolved_published,
     )
 
 
@@ -155,9 +258,10 @@ def update_book(
     category_id: int | None = None,
     description: str | None = None,
     visibility: str | None = None,
+    is_published: bool | None = None,
     custom_slug: str | None = None,
 ) -> Book:
-    """Update an owned book's metadata."""
+    """Update an owned book's metadata and publish state."""
     book = Book.objects.select_related("author", "category").get(id=book_id, author=author)
 
     if title is not None:
@@ -173,9 +277,9 @@ def update_book(
         book.title = clean_title
 
     if category_id is not None:
-        category = Category.objects.filter(id=category_id).first()
+        category = Category.objects.filter(id=category_id, author=author).first()
         if not category:
-            raise ValidationError("Category not found.")
+            raise ValidationError("Category not found on your desk.")
         book.category = category
 
     if description is not None:
@@ -189,6 +293,15 @@ def update_book(
             raise ValidationError("Visibility must be 'public' or 'private'.")
         book.visibility = visibility
 
+    if is_published is not None:
+        if is_published and book.visibility != "public":
+            raise ValidationError("Private books cannot be published.")
+        book.is_published = bool(is_published)
+
+    # Invariant: private books can NEVER be published
+    if book.visibility == "private":
+        book.is_published = False
+
     if custom_slug is not None:
         book.slug = generate_unique_book_slug(
             author,
@@ -198,6 +311,7 @@ def update_book(
         )
 
     book.save()
+    return book
     return book
 
 
