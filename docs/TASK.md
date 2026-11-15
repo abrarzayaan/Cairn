@@ -198,12 +198,12 @@ Legend: **P** = priority (M must, S should, C could)
 - [x] TC.7 Update Django Admin & `sitemap.xml` / `robots.txt` rules to reflect `is_published` and per-author categories (S)
 
 ### Phase 2: Frontend (Desk Categories, Publish Controls, Topic+Profile Search)
-- [ ] TC.8 Editor (`NoteEditor.tsx`) & Book modal/settings: 3-state access control (`Private`, `Public (profile only)`, `Published (globally searchable)`) + inline `+ New Category` creation/management on personal desk (M)
-- [ ] TC.9 Profile Desk (`/u/<user>`): display user's personal categories (only those with visible public/published books) as desk shelves, plus clear `Public` vs `Published` badges for owner (M)
-- [ ] TC.10 Home Hub (`/`) & Search (`SearchPalette.tsx`, `/search`): show only **published** docs/books globally, remove global category filter (keep category filter in `scope=mine` / profile), and render matching author profiles alongside topic search results (M)
+- [x] TC.8 Editor (`NoteEditor.tsx`) & Book modal/settings: 3-state access control (`Private`, `Public (profile only)`, `Published (globally searchable)`) + inline `+ New Category` creation/management on personal desk (M)
+- [x] TC.9 Profile Desk (`/u/<user>`): display user's personal categories (only those with visible public/published books) as desk shelves, plus clear `Public` vs `Published` badges for owner (M)
+- [x] TC.10 Home Hub (`/`) & Search (`SearchPalette.tsx`, `/search`): show only **published** docs/books globally, remove global category filter (keep category filter in `scope=mine` / profile), and render matching author profiles alongside topic search results (M)
 
 ### Phase 3: Tests & Verification
-- [ ] TC.11 Integration & security tests: personal category isolation (no cross-user edit/delete, private-only categories hidden on profile), `public` vs `published` leak matrix (unpublished public docs never appear in global search/home/tags/sitemap), and topic-based profile discovery in global search (M)
+- [x] TC.11 Integration & security tests: personal category isolation (no cross-user edit/delete, private-only categories hidden on profile), `public` vs `published` leak matrix (unpublished public docs never appear in global search/home/tags/sitemap), and topic-based profile discovery in global search (M)
 
 **Done when:** each user has their own personal categories on their desk; `Public` docs show only on their profile/direct link; `Published` docs appear in global search together with the author's profile.
 

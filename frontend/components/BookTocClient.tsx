@@ -317,28 +317,39 @@ export default function BookTocClient({
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 font-mono text-xs">
+            <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
               <button
                 type="button"
-                onClick={() => setVisibility("private")}
-                className={`rounded border px-3 py-1 ${
-                  visibility === "private"
-                    ? "border-warn bg-bg-subtle text-warn"
-                    : "border-border text-text-muted"
+                onClick={() => setAccessState("private")}
+                className={`rounded border px-3 py-1 transition-colors ${
+                  accessState === "private"
+                    ? "border-warn bg-bg-subtle text-warn font-medium shadow-sm"
+                    : "border-border text-text-muted hover:border-border-strong"
                 }`}
               >
-                Private Book
+                Private (Desk)
               </button>
               <button
                 type="button"
-                onClick={() => setVisibility("public")}
-                className={`rounded border px-3 py-1 ${
-                  visibility === "public"
-                    ? "border-ok bg-bg-subtle text-ok"
-                    : "border-border text-text-muted"
+                onClick={() => setAccessState("public_desk")}
+                className={`rounded border px-3 py-1 transition-colors ${
+                  accessState === "public_desk"
+                    ? "border-accent bg-bg-subtle text-accent font-medium shadow-sm"
+                    : "border-border text-text-muted hover:border-border-strong"
                 }`}
               >
-                Public Book
+                Public Desk
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccessState("published")}
+                className={`rounded border px-3 py-1 transition-colors ${
+                  accessState === "published"
+                    ? "border-ok bg-bg-subtle text-ok font-medium shadow-sm"
+                    : "border-border text-text-muted hover:border-border-strong"
+                }`}
+              >
+                Published
               </button>
             </div>
 
@@ -411,9 +422,17 @@ export default function BookTocClient({
                       >
                         {chapter.title}
                       </Link>
-                      {chapter.visibility === "private" && (
+                      {chapter.visibility === "private" ? (
                         <span className="rounded border border-warn/40 bg-bg-subtle px-1.5 py-0.5 font-mono text-[10px] text-warn">
                           private
+                        </span>
+                      ) : chapter.is_published ? (
+                        <span className="rounded border border-ok/30 bg-bg-subtle px-1.5 py-0.5 font-mono text-[10px] text-ok">
+                          published
+                        </span>
+                      ) : (
+                        <span className="rounded border border-accent/30 bg-bg-subtle px-1.5 py-0.5 font-mono text-[10px] text-accent">
+                          desk only
                         </span>
                       )}
                     </div>
