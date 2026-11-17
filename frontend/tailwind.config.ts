@@ -9,39 +9,60 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: {
-          DEFAULT: "var(--bg)",
-          subtle: "var(--bg-subtle)",
-          inset: "var(--bg-inset)",
+        surface: {
+          0: "var(--surface-0)",
+          1: "var(--surface-1)",
+          2: "var(--surface-2)",
         },
         border: {
-          DEFAULT: "var(--border)",
+          DEFAULT: "var(--border-default)",
+          subtle: "var(--border-subtle)",
+          default: "var(--border-default)",
           strong: "var(--border-strong)",
         },
         text: {
-          DEFAULT: "var(--text)",
-          muted: "var(--text-muted)",
+          DEFAULT: "var(--text-primary)",
+          primary: "var(--text-primary)",
+          secondary: "var(--text-secondary)",
+          tertiary: "var(--text-tertiary)",
+          disabled: "var(--text-disabled)",
+          muted: "var(--text-tertiary)",
         },
         accent: {
           DEFAULT: "var(--accent)",
-          bg: "var(--accent-bg)",
+          light: "var(--accent-light)",
+          hover: "var(--accent-hover)",
+          bg: "var(--accent-light)",
         },
-        ok: "var(--ok)",
-        warn: "var(--warn)",
-        danger: "var(--danger)",
+        status: {
+          success: "var(--status-success)",
+          warning: "var(--status-warning)",
+          danger: "var(--status-danger)",
+        },
+        /* Legacy aliases for incremental migration */
+        bg: {
+          DEFAULT: "var(--surface-0)",
+          subtle: "var(--surface-1)",
+          inset: "var(--surface-2)",
+        },
+        ok: "var(--status-success)",
+        warn: "var(--status-warning)",
+        danger: "var(--status-danger)",
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
-        serif: ["var(--font-serif)", "Georgia", "serif"],
-        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
+        sans: ["var(--font-sans)"],
+        serif: ["var(--font-serif)"],
+        mono: ["var(--font-mono)"],
       },
       borderRadius: {
-        DEFAULT: "3px",
+        DEFAULT: "var(--radius-sm)",
+        sm: "var(--radius-sm)",
+        md: "var(--radius-md)",
+        lg: "var(--radius-lg)",
       },
     },
   },
-  plugins: [],
+  plugins: [require("tailwindcss-animate")],
 };
 
 export default config;
-

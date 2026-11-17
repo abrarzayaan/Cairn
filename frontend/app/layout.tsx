@@ -1,32 +1,32 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import {
-  IBM_Plex_Mono,
-  IBM_Plex_Sans,
+  Inter,
+  JetBrains_Mono,
+  Lora,
   Noto_Sans_Bengali,
-  Source_Serif_4,
 } from "next/font/google";
-import Navbar from "@/components/Navbar";
+import AppShell from "@/components/AppShell";
 import "./globals.css";
 
-const plexSans = IBM_Plex_Sans({
+const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-plex-sans",
+  variable: "--font-inter",
   display: "swap",
 });
 
-const sourceSerif = Source_Serif_4({
+const lora = Lora({
   subsets: ["latin"],
-  weight: ["400", "600"],
-  variable: "--font-source-serif",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-lora",
   display: "swap",
 });
 
-const plexMono = IBM_Plex_Mono({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
-  variable: "--font-plex-mono",
+  variable: "--font-jetbrains-mono",
   display: "swap",
 });
 
@@ -57,36 +57,16 @@ export default async function RootLayout({
     <html
       lang="en"
       data-theme={themeAttr}
-      className={`${plexSans.variable} ${sourceSerif.variable} ${plexMono.variable} ${notoBengali.variable}`}
+      className={`${inter.variable} ${lora.variable} ${jetbrainsMono.variable} ${notoBengali.variable}`}
     >
-      <body className="flex min-h-screen flex-col bg-bg text-text antialiased">
+      <body className="min-h-screen bg-surface-0 font-sans text-text-primary antialiased">
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-text focus:px-3 focus:py-2 focus:text-xs focus:text-bg"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-sm focus:bg-text-primary focus:px-3 focus:py-2 focus:text-xs focus:text-surface-0"
         >
           Skip to content
         </a>
-        <Navbar initialTheme={themeAttr} />
-        <main
-          id="main-content"
-          className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-6 sm:py-8"
-        >
-          {children}
-        </main>
-        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-4 text-xs text-text-muted">
-          <div>Cairn &middot; Linked notes for developers</div>
-          <div className="flex gap-3">
-            <a href="/about" className="hover:text-text">
-              About
-            </a>
-            <a href="/terms" className="hover:text-text">
-              Terms
-            </a>
-            <a href="/privacy" className="hover:text-text">
-              Privacy
-            </a>
-          </div>
-        </footer>
+        <AppShell initialTheme={themeAttr}>{children}</AppShell>
       </body>
     </html>
   );

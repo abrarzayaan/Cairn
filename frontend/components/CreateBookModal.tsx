@@ -1,13 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { X, FolderPlus, Globe, Lock, BookOpen } from "lucide-react";
+import { BookOpen, FolderPlus, Globe, Lock } from "lucide-react";
 import {
   BookSummary,
   Category,
   createBook,
   createCategory,
 } from "@/lib/api";
+import { Button } from "@/components/ui/Button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/Dialog";
+import { cn } from "@/lib/utils";
 
 interface CreateBookModalProps {
   open: boolean;
@@ -30,7 +40,7 @@ export default function CreateBookModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState<number | "">(
-    defaultCategoryId || categories[0]?.id || ""
+    defaultCategoryId || categories[0]?.id || "",
   );
   const [accessState, setAccessState] = useState<AccessState>("private");
   const [addingCat, setAddingCat] = useState(false);
@@ -38,9 +48,8 @@ export default function CreateBookModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!open) return null;
-
-  const activeCategories = localCats.length >= categories.length ? localCats : categories;
+  const activeCategories =
+    localCats.length >= categories.length ? localCats : categories;
 
   const handleCreateCategory = async () => {
     if (!newCatName.trim()) return;
@@ -49,14 +58,16 @@ export default function CreateBookModal({
     try {
       const cat = await createCategory({ name: newCatName.trim() });
       const next = [...activeCategories, cat].sort((a, b) =>
-        a.name.localeCompare(b.name)
+        a.name.localeCompare(b.name),
       );
       setLocalCats(next);
       setCategoryId(cat.id);
       setNewCatName("");
       setAddingCat(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create category");
+      setError(
+        err instanceof Error ? err.message : "Could not create category",
+      );
     } finally {
       setBusy(false);
     }
@@ -80,7 +91,9 @@ export default function CreateBookModal({
         visibility,
         is_published,
       });
-      const maybeNewCat = activeCategories.find((c) => c.id === created.category.id);
+      const maybeNewCat = activeCategories.find(
+        (c) => c.id === created.category.id,
+      );
       onCreated(created, maybeNewCat);
       setTitle("");
       setDescription("");
@@ -94,48 +107,33 @@ export default function CreateBookModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[1px]"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-book-title"
-    >
-      <div className="w-full max-w-lg rounded-md border border-border-strong bg-bg p-5 shadow-xl">
-        <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
-          <h2
-            id="create-book-title"
-            className="font-sans text-base font-semibold text-text"
-          >
-            New Documentation Book
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text"
-            aria-label="Close modal"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New Documentation Book</DialogTitle>
+          <DialogDescription>
+            Group sequential chapters under a desk category.
+          </DialogDescription>
+        </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="rounded border border-danger/40 bg-bg-subtle px-3 py-2 font-mono text-xs text-danger">
+            <div className="rounded-sm border border-status-danger bg-surface-1 px-3 py-2 text-xs text-status-danger">
               {error}
             </div>
           )}
 
           <div>
-            <div className="mb-1 flex items-center justify-between">
-              <label className="font-mono text-xs text-text-muted">
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="text-xs font-medium text-text-secondary">
                 Desk Category
               </label>
               <button
                 type="button"
                 onClick={() => setAddingCat((v) => !v)}
-                className="inline-flex items-center gap-1 font-mono text-[11px] text-accent hover:underline"
+                className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
               >
-                <FolderPlus className="h-3 w-3" />
+                <FolderPlus className="h-3.5 w-3.5" />
                 {addingCat ? "Cancel" : "+ New Category"}
               </button>
             </div>
@@ -148,16 +146,17 @@ export default function CreateBookModal({
                   onChange={(e) => setNewCatName(e.target.value)}
                   placeholder="e.g. Distributed Systems"
                   maxLength={60}
-                  className="flex-1 rounded border border-border-strong bg-bg px-2.5 py-1.5 font-sans text-sm text-text focus:border-accent focus:outline-none"
+                  className="flex-1 rounded-sm border border-border-default bg-surface-0 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
                 />
-                <button
+                <Button
                   type="button"
+                  size="sm"
+                  variant="secondary"
                   disabled={busy}
                   onClick={handleCreateCategory}
-                  className="rounded border border-border-strong bg-bg-subtle px-3 py-1.5 font-mono text-xs text-text hover:border-accent"
                 >
                   Add
-                </button>
+                </Button>
               </div>
             ) : (
               <select
@@ -165,7 +164,7 @@ export default function CreateBookModal({
                 onChange={(e) =>
                   setCategoryId(e.target.value ? Number(e.target.value) : "")
                 }
-                className="w-full rounded border border-border-strong bg-bg px-2.5 py-1.5 font-sans text-sm text-text focus:border-accent focus:outline-none"
+                className="w-full rounded-sm border border-border-default bg-surface-0 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
               >
                 {activeCategories.map((cat) => (
                   <option key={cat.id} value={cat.id}>
@@ -177,7 +176,7 @@ export default function CreateBookModal({
           </div>
 
           <div>
-            <label className="mb-1 block font-mono text-xs text-text-muted">
+            <label className="mb-1.5 block text-xs font-medium text-text-secondary">
               Book Title
             </label>
             <input
@@ -187,12 +186,12 @@ export default function CreateBookModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. PostgreSQL Internals"
-              className="w-full rounded border border-border-strong bg-bg px-3 py-1.5 font-sans text-sm text-text focus:border-accent focus:outline-none"
+              className="w-full rounded-sm border border-border-default bg-surface-0 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="mb-1 block font-mono text-xs text-text-muted">
+            <label className="mb-1.5 block text-xs font-medium text-text-secondary">
               Overview / Context (optional)
             </label>
             <textarea
@@ -201,83 +200,84 @@ export default function CreateBookModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="What sequence of concepts this documentation book covers..."
-              className="w-full rounded border border-border-strong bg-bg px-3 py-1.5 font-sans text-sm text-text focus:border-accent focus:outline-none"
+              className="w-full rounded-sm border border-border-default bg-surface-0 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="mb-1.5 block font-mono text-xs text-text-muted">
+            <label className="mb-1.5 block text-xs font-medium text-text-secondary">
               Access &amp; Publishing
             </label>
-            <div className="grid grid-cols-1 gap-2 font-mono text-xs sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
               <button
                 type="button"
                 onClick={() => setAccessState("private")}
-                className={`rounded border p-2.5 text-left transition-colors ${
+                className={cn(
+                  "rounded-sm border p-2.5 text-left transition-colors",
                   accessState === "private"
-                    ? "border-warn bg-bg-subtle text-warn font-medium shadow-sm"
-                    : "border-border bg-bg text-text-muted hover:border-border-strong"
-                }`}
+                    ? "border-accent bg-accent-light text-accent"
+                    : "border-border-default bg-surface-0 text-text-secondary hover:border-border-strong",
+                )}
               >
                 <div className="flex items-center gap-1.5 font-semibold">
                   <Lock className="h-3.5 w-3.5" />
                   <span>Private</span>
                 </div>
-                <div className="mt-1 text-[10px] opacity-80">Only you on your desk</div>
+                <div className="mt-1 text-[11px] opacity-80">
+                  Only you on your desk
+                </div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setAccessState("public_desk")}
-                className={`rounded border p-2.5 text-left transition-colors ${
+                className={cn(
+                  "rounded-sm border p-2.5 text-left transition-colors",
                   accessState === "public_desk"
-                    ? "border-accent bg-bg-subtle text-accent font-medium shadow-sm"
-                    : "border-border bg-bg text-text-muted hover:border-border-strong"
-                }`}
+                    ? "border-accent bg-accent-light text-accent"
+                    : "border-border-default bg-surface-0 text-text-secondary hover:border-border-strong",
+                )}
               >
                 <div className="flex items-center gap-1.5 font-semibold">
                   <BookOpen className="h-3.5 w-3.5" />
                   <span>Public Desk</span>
                 </div>
-                <div className="mt-1 text-[10px] opacity-80">Profile &amp; link only</div>
+                <div className="mt-1 text-[11px] opacity-80">
+                  Profile &amp; link only
+                </div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setAccessState("published")}
-                className={`rounded border p-2.5 text-left transition-colors ${
+                className={cn(
+                  "rounded-sm border p-2.5 text-left transition-colors",
                   accessState === "published"
-                    ? "border-ok bg-bg-subtle text-ok font-medium shadow-sm"
-                    : "border-border bg-bg text-text-muted hover:border-border-strong"
-                }`}
+                    ? "border-accent bg-accent-light text-accent"
+                    : "border-border-default bg-surface-0 text-text-secondary hover:border-border-strong",
+                )}
               >
                 <div className="flex items-center gap-1.5 font-semibold">
                   <Globe className="h-3.5 w-3.5" />
                   <span>Published</span>
                 </div>
-                <div className="mt-1 text-[10px] opacity-80">Global search &amp; feeds</div>
+                <div className="mt-1 text-[11px] opacity-80">
+                  Global search &amp; feeds
+                </div>
               </button>
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 border-t border-border pt-3 font-mono text-xs">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded border border-border px-3 py-1.5 text-text-muted hover:text-text"
-            >
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded bg-text px-4 py-1.5 font-medium text-bg hover:bg-accent disabled:opacity-50"
-            >
-              {busy ? "Creating..." : "Create Book"}
-            </button>
-          </div>
+            </Button>
+            <Button type="submit" loading={busy}>
+              Create Book
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
