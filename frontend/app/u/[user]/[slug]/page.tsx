@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import Link from "next/link";
@@ -30,62 +31,63 @@ interface PrereqItem {
   status: string;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { user, slug } = await params;
+const getNoteData = cache(async (user: string, slug: string, cookieHeader: string) => {
   const backendUrl =
     process.env.BACKEND_INTERNAL_URL ||
     process.env.BACKEND_URL ||
     "http://127.0.0.1:8000";
-
   try {
-    // Always fetch anonymously so private/hidden notes never leak into meta tags
     const res = await fetch(
       `${backendUrl}/api/v1/notes/by-slug/${encodeURIComponent(user)}/${encodeURIComponent(slug)}`,
-      { cache: "no-store" }
+      {
+        cache: "no-store",
+        headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+      },
     );
-    if (!res.ok) {
-      return {
-        title: "Cairn",
-        robots: { index: false, follow: false },
-      };
-    }
-    const data = await res.json();
-    const note = data.note;
-    if (!note || note.visibility !== "public" || note.moderation === "hidden") {
-      return {
-        title: "Cairn",
-        robots: { index: false, follow: false },
-      };
-    }
-
-    const title = `${note.title} — @${note.author_username}`;
-    const description =
-      note.summary ||
-      `Technical note "${note.title}" by @${note.author_username} on Cairn.`;
-    const canonicalPath = `/u/${note.author_username}/${note.slug}`;
-
-    return {
-      title,
-      description,
-      alternates: {
-        canonical: canonicalPath,
-      },
-      robots: note.is_published
-        ? { index: true, follow: true }
-        : { index: false, follow: false },
-      openGraph: {
-        type: "article",
-        siteName: "Cairn",
-        title,
-        description,
-        url: canonicalPath,
-      },
-    };
+    if (!res.ok) return null;
+    return await res.json();
   } catch {
+    return null;
+  }
+});
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { user, slug } = await params;
+  const cookieStore = await cookies();
+  const data = await getNoteData(user, slug, cookieStore.toString());
+  const note = data?.note;
+
+  // Never emit private/hidden note details into metadata/OG tags
+  if (!note || note.visibility !== "public" || note.moderation === "hidden") {
     return {
       title: "Cairn",
+      robots: { index: false, follow: false },
     };
   }
+
+  const title = `${note.title} — @${note.author_username}`;
+  const description =
+    note.summary ||
+    `Technical note "${note.title}" by @${note.author_username} on Cairn.`;
+  const canonicalPath = `/u/${note.author_username}/${note.slug}`;
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: canonicalPath,
+    },
+    robots: note.is_published
+      ? { index: true, follow: true }
+      : { index: false, follow: false },
+    openGraph: {
+      type: "article",
+      siteName: "Cairn",
+      title,
+      description,
+      url: canonicalPath,
+    },
+  };
 }
 
 export default async function NotePage({ params }: PageProps) {
@@ -97,21 +99,10 @@ export default async function NotePage({ params }: PageProps) {
   const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
-  let res;
-  try {
-    res = await fetch(`${backendUrl}/api/v1/notes/by-slug/${user}/${slug}`, {
-      cache: "no-store",
-      headers: cookieHeader ? { cookie: cookieHeader } : undefined,
-    });
-  } catch {
+  const data = await getNoteData(user, slug, cookieHeader);
+  if (!data) {
     notFound();
   }
-
-  if (res.status === 404 || !res.ok) {
-    notFound();
-  }
-
-  const data = await res.json();
   const note = data.note;
   const directPrereqs: PrereqItem[] = data.direct_prereqs || [];
   const chapters: ChapterRef[] = data.chapters || [];

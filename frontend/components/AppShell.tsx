@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Category, fetchCategories, fetchMe, User } from "@/lib/api";
 import Navbar from "@/components/Navbar";
+import NavigationProgress from "@/components/NavigationProgress";
 import Sidebar from "@/components/Sidebar";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 
@@ -53,6 +54,9 @@ export default function AppShell({
 
   return (
     <TooltipProvider delayDuration={300}>
+      <Suspense fallback={null}>
+        <NavigationProgress />
+      </Suspense>
       <div className="flex min-h-screen flex-col bg-surface-0 text-text-primary">
         <Navbar
           initialTheme={initialTheme}

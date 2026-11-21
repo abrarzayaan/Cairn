@@ -1,31 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 
 /**
- * Thin accent reading progress bar pinned below the sticky 48px navbar.
+ * GPU-composited reading progress bar using rAF + scaleX (zero React re-renders on scroll).
  */
 export default function ReadingProgressBar() {
-  const [progress, setProgress] = useState(0);
+  const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let rafId = 0;
+
     const update = () => {
+      rafId = 0;
+      const el = barRef.current;
+      if (!el) return;
       const doc = document.documentElement;
       const scrollTop = window.scrollY || doc.scrollTop;
       const scrollHeight = doc.scrollHeight - doc.clientHeight;
-      if (scrollHeight <= 0) {
-        setProgress(0);
-        return;
+      const ratio =
+        scrollHeight <= 0 ? 0 : Math.min(1, Math.max(0, scrollTop / scrollHeight));
+      el.style.transform = `scaleX(${ratio})`;
+    };
+
+    const onScroll = () => {
+      if (!rafId) {
+        rafId = window.requestAnimationFrame(update);
       }
-      setProgress(Math.min(100, Math.max(0, (scrollTop / scrollHeight) * 100)));
     };
 
     update();
-    window.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
     return () => {
-      window.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
+      if (rafId) window.cancelAnimationFrame(rafId);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
     };
   }, []);
 
@@ -35,8 +45,9 @@ export default function ReadingProgressBar() {
       className="pointer-events-none fixed left-0 right-0 top-12 z-30 h-[2px] bg-transparent"
     >
       <div
-        className="h-full bg-accent transition-[width] duration-75 ease-out"
-        style={{ width: `${progress}%` }}
+        ref={barRef}
+        className="h-full w-full origin-left bg-accent will-change-transform"
+        style={{ transform: "scaleX(0)" }}
       />
     </div>
   );

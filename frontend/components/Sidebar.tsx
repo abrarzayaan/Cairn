@@ -17,7 +17,6 @@ import {
   User as UserIcon,
   X,
 } from "lucide-react";
-import { motion } from "motion/react";
 import { Category, createCategory, User } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -274,19 +273,17 @@ export default function Sidebar({
   return (
     <>
       {/* Desktop Sticky Collapsible Rail */}
-      <motion.aside
-        initial={false}
-        animate={{ width: collapsed ? 56 : 220 }}
-        transition={{ duration: 0.18, ease: "easeOut" }}
-        className="sticky top-12 hidden h-[calc(100vh-3rem)] shrink-0 overflow-hidden border-r border-border-subtle bg-surface-1 md:block"
+      <aside
+        style={{ width: collapsed ? 56 : 220 }}
+        className="sticky top-12 hidden h-[calc(100vh-3rem)] shrink-0 overflow-hidden border-r border-border-subtle bg-surface-1 transition-[width] duration-150 ease-out md:block"
       >
         {renderContent(false)}
-      </motion.aside>
+      </aside>
 
       {/* Mobile Drawer (Radix Dialog) */}
       <DialogPrimitive.Root open={mobileOpen} onOpenChange={onMobileOpenChange}>
         <DialogPrimitive.Portal>
-          <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] md:hidden" />
+          <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 md:hidden" />
           <DialogPrimitive.Content className="fixed inset-y-0 left-0 z-50 w-[260px] border-r border-border-default bg-surface-1 shadow-xl focus:outline-none md:hidden">
             <div className="flex h-12 items-center justify-between border-b border-border-subtle px-4">
               <DialogPrimitive.Title className="text-sm font-semibold text-text-primary">

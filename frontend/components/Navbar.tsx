@@ -55,7 +55,7 @@ export default function Navbar({
 
   return (
     <>
-      <header className="sticky top-0 z-40 h-12 border-b border-border-subtle bg-surface-0/95 backdrop-blur-sm">
+      <header className="sticky top-0 z-40 h-12 border-b border-border-subtle bg-surface-0">
         <div className="flex h-full items-center justify-between gap-3 px-3 sm:px-5">
           {/* Left: Mobile drawer trigger + Brand Logo */}
           <div className="flex items-center gap-2">
