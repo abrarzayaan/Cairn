@@ -58,6 +58,10 @@ const nextConfig: NextConfig = {
         destination: `${backendUrl}/accounts/:path*`,
       },
       {
+        source: "/static/:path*",
+        destination: `${backendUrl}/static/:path*`,
+      },
+      {
         source: "/admin-secret/:path*",
         destination: `${backendUrl}/admin-secret/:path*`,
       },

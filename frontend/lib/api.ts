@@ -25,10 +25,12 @@ export async function fetchMe(): Promise<AuthStatus> {
 }
 
 export async function updateBio(bio: string): Promise<User> {
+  const csrf = await ensureCsrfToken();
   const res = await fetch("/api/v1/auth/bio", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "X-CSRFToken": csrf,
     },
     credentials: "include",
     body: JSON.stringify({ bio }),
@@ -45,6 +47,21 @@ export async function logoutUser(): Promise<void> {
     method: "POST",
     credentials: "include",
   });
+}
+
+export async function logoutAllDevices(): Promise<{ ok: boolean; revoked: number }> {
+  const csrf = await ensureCsrfToken();
+  const res = await fetch("/api/v1/auth/logout-all", {
+    method: "POST",
+    headers: {
+      "X-CSRFToken": csrf,
+    },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error(await extractErrorMessage(res, "Could not sign out all sessions"));
+  }
+  return await res.json();
 }
 
 export async function exportMyNotesZip(): Promise<Blob> {

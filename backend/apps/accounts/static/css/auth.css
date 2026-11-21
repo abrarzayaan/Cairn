@@ -1,0 +1,138 @@
+:root {
+  --surface-0: #ffffff;
+  --surface-1: #f7f7f8;
+  --text-primary: #0d0d0d;
+  --text-secondary: #3d3d3d;
+  --text-tertiary: #6b6b6b;
+  --border-default: rgba(0, 0, 0, 0.12);
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --danger: #dc2626;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-0: #111111;
+    --surface-1: #1a1a1a;
+    --text-primary: #fafafa;
+    --text-secondary: #d4d4d4;
+    --text-tertiary: #737373;
+    --border-default: rgba(255, 255, 255, 0.1);
+    --accent: #818cf8;
+    --accent-hover: #6366f1;
+    --danger: #ef4444;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--border-default);
+  background: var(--surface-0);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: none;
+  margin-bottom: 20px;
+}
+
+.brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--accent);
+  display: inline-block;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+p {
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.notice {
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--surface-1);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.notice strong {
+  color: var(--text-primary);
+}
+
+.notice-error {
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.btn-primary {
+  width: 100%;
+  height: 40px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  transition: background-color 120ms ease;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+.footer-link {
+  display: block;
+  margin-top: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-decoration: none;
+}
+
+.footer-link:hover {
+  color: var(--text-primary);
+}

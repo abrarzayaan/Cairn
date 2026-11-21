@@ -1,0 +1,25 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Authentication error · Cairn</title>
+  <link rel="stylesheet" href="{% static 'css/auth.css' %}" />
+</head>
+<body>
+  <main class="auth-card">
+    <a href="/" class="brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span>cairn</span>
+    </a>
+
+    <h1>Could not complete sign in</h1>
+    <div class="notice notice-error">
+      An error occurred while verifying your GitHub login. Please try again.
+    </div>
+
+    <a href="/login" class="btn-primary">Try signing in again</a>
+    <a href="/" class="footer-link">Return to Cairn home</a>
+  </main>
+</body>
+</html>

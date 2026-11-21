@@ -47,7 +47,7 @@ Tick `[x]` only after you have verified it, not when you believe it is done.
 - [x] **[R]** Session lifetime limited (14 days rolling) and rotated on login
 - [x] **[R]** Logout is POST-only and destroys the server-side session
 - [x] **[R]** No auth token or session id is ever stored in `localStorage`/`sessionStorage`
-- [ ] **[S]** "Sign out everywhere" option in settings
+- [x] **[S]** "Sign out everywhere" option in settings
 - [ ] **[S]** Open redirect check: `next` parameter only allows same-site relative paths
 
 ## 3. Authorization (access control)
@@ -203,7 +203,7 @@ Every payload must render as inert text or a safe link.
 - [ ] **[R]** Export includes everything the user owns
 - [ ] **[R]** Logs never contain note content, session ids, OAuth codes, or tokens
 - [ ] **[R]** Log retention limited (e.g. 14-30 days)
-- [ ] **[R]** Privacy page says plainly: what is collected, what is public, what is private, how to delete
+- [x] **[R]** Privacy page says plainly: what is collected, what is public, what is private, how to delete
 - [ ] **[R]** No third-party analytics or trackers
 - [ ] **[R]** Backups are encrypted and access-restricted; deleted accounts disappear from backups within the retention window (stated in Privacy page)
 - [ ] **[S]** Optional encryption at rest for `content_md` of private notes (field-level) as a later hardening step

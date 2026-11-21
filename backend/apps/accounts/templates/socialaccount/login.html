@@ -1,0 +1,37 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in with {{ provider.name }} · Cairn</title>
+  <link rel="stylesheet" href="{% static 'css/auth.css' %}" />
+</head>
+<body>
+  <main class="auth-card">
+    <a href="/" class="brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span>cairn</span>
+    </a>
+
+    <h1>Sign in with {{ provider.name }}</h1>
+    <p>
+      You are about to sign in to Cairn using your {{ provider.name }} account.
+    </p>
+
+    <div class="notice">
+      <strong>Public profile only:</strong> Cairn requests zero repository or
+      email scopes and discards the OAuth token immediately after verifying your
+      GitHub ID.
+    </div>
+
+    <form method="post">
+      {% csrf_token %}
+      <button type="submit" class="btn-primary">
+        Continue to {{ provider.name }} &rarr;
+      </button>
+    </form>
+
+    <a href="/login" class="footer-link">&larr; Back to Cairn</a>
+  </main>
+</body>
+</html>

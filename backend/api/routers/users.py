@@ -11,6 +11,7 @@ from api.schemas.notes import BookSummaryOut, CategoryOut
 from api.schemas.users import AuthStatus, DeleteAccountIn, UpdateBioIn, UserOut
 from apps.accounts.models import User
 from apps.accounts.services import delete_user_account, export_user_notes_zip, update_user_bio
+from apps.moderation.services import invalidate_user_sessions
 from apps.search.services import get_user_profile
 
 router = APIRouter(tags=["auth"])
@@ -72,7 +73,7 @@ def get_me(
     )
 
 
-@router.post("/auth/bio", response_model=UserOut)
+@router.post("/auth/bio", response_model=UserOut, dependencies=[Depends(verify_csrf)])
 def set_bio(data: UpdateBioIn, user: User = Depends(require_user)):
     updated = update_user_bio(user, data.bio)
     return UserOut(id=updated.id, username=updated.username, bio=updated.bio)
@@ -85,6 +86,21 @@ def logout(response: Response, sessionid: str | None = Cookie(None)):
         session.flush()
     response.delete_cookie("sessionid")
     return {"ok": True}
+
+
+@router.post("/auth/logout-all", dependencies=[Depends(verify_csrf)])
+def logout_all_devices(
+    response: Response,
+    user: User = Depends(require_user),
+    sessionid: str | None = Cookie(None),
+):
+    """Revoke every active server-side session belonging to the authenticated user."""
+    revoked = invalidate_user_sessions(user)
+    if sessionid:
+        session = SessionStore(session_key=sessionid)
+        session.flush()
+    response.delete_cookie("sessionid")
+    return {"ok": True, "revoked": revoked}
 
 
 @router.get("/auth/export")

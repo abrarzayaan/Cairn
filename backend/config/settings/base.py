@@ -24,10 +24,16 @@ ALLOWED_HOSTS = [
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.environ.get(
-        "CSRF_TRUSTED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000"
+        "CSRF_TRUSTED_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000",
     ).split(",")
     if origin.strip()
 ]
+
+# Reverse-proxy awareness (Caddy / Cloudflare / Next.js rewrites) so OAuth redirect_uri matches public origin
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = os.environ.get("ACCOUNT_DEFAULT_HTTP_PROTOCOL", "http")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -75,7 +81,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "apps" / "accounts" / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -162,9 +168,9 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_SAVE_EVERY_REQUEST = True
 
-# Allauth / GitHub
+# Allauth / GitHub (OAuth 2.1 hardened: POST+CSRF only, PKCE S256, zero-scope public profile, no token storage)
 SOCIALACCOUNT_STORE_TOKENS = False
-SOCIALACCOUNT_LOGIN_ON_GET = True
+SOCIALACCOUNT_LOGIN_ON_GET = False
 ACCOUNT_LOGIN_METHODS = {"username"}
 ACCOUNT_SIGNUP_FIELDS = ["username*"]
 ACCOUNT_USER_MODEL_EMAIL_FIELD = None
@@ -173,8 +179,8 @@ SOCIALACCOUNT_AUTO_SIGNUP = True
 ACCOUNT_ADAPTER = "apps.accounts.adapters.CustomAccountAdapter"
 SOCIALACCOUNT_ADAPTER = "apps.accounts.adapters.CustomSocialAccountAdapter"
 ACCOUNT_LOGOUT_ON_GET = False
-LOGIN_REDIRECT_URL = os.environ.get("LOGIN_REDIRECT_URL", "http://localhost:3000/")
-LOGOUT_REDIRECT_URL = os.environ.get("LOGOUT_REDIRECT_URL", "http://localhost:3000/login")
+LOGIN_REDIRECT_URL = os.environ.get("LOGIN_REDIRECT_URL", "/")
+LOGOUT_REDIRECT_URL = os.environ.get("LOGOUT_REDIRECT_URL", "/login")
 ACCOUNT_LOGOUT_REDIRECT_URL = LOGOUT_REDIRECT_URL
 
 # GitHub OAuth credentials
@@ -183,7 +189,9 @@ GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "").strip()
 
 SOCIALACCOUNT_PROVIDERS = {
     "github": {
-        "SCOPE": ["read:user"],
+        # Empty scope = GitHub "Public data only" (zero repo, email, or private profile access)
+        "SCOPE": [],
+        "OAUTH_PKCE_ENABLED": True,
         "APP": {
             "client_id": GITHUB_CLIENT_ID,
             "secret": GITHUB_CLIENT_SECRET,

@@ -159,15 +159,21 @@ def test_auth_api_flow_authenticated(api_client, client):
 
     connection.close()
 
-    # GET /me with session cookie
+    # GET /me with session cookie (also issues csrftoken cookie)
     api_client.cookies.set("sessionid", session_cookie)
     me_res = api_client.get("/api/v1/auth/me")
     assert me_res.status_code == 200
     assert me_res.json()["authenticated"] is True
     assert me_res.json()["user"]["username"] == "charlie"
+    csrf = api_client.cookies.get("csrftoken")
 
-    # POST /api/v1/auth/bio
-    bio_res = api_client.post("/api/v1/auth/bio", json={"bio": "Rust and Python enthusiast"})
+    # POST /api/v1/auth/bio (requires CSRF)
+    assert api_client.post("/api/v1/auth/bio", json={"bio": "No CSRF"}).status_code == 403
+    bio_res = api_client.post(
+        "/api/v1/auth/bio",
+        json={"bio": "Rust and Python enthusiast"},
+        headers={"X-CSRFToken": csrf},
+    )
     assert bio_res.status_code == 200
     assert bio_res.json()["bio"] == "Rust and Python enthusiast"
 
@@ -215,3 +221,82 @@ def test_social_signup_open_even_when_regular_signup_closed(rf, adapter):
 
     assert res.status_code == 302
     assert User.objects.filter(github_id=909090, username="new_gh_user").exists()
+
+
+@pytest.mark.django_db
+def test_github_oauth_post_only_pkce_and_zero_scope(client, settings):
+    """GitHub OAuth requires POST+CSRF (no Login CSRF), enables PKCE S256, and requests zero scope."""
+    from urllib.parse import parse_qs, urlparse
+
+    assert settings.SOCIALACCOUNT_LOGIN_ON_GET is False
+    assert settings.SOCIALACCOUNT_STORE_TOKENS is False
+    assert settings.SOCIALACCOUNT_PROVIDERS["github"]["SCOPE"] == []
+    assert settings.SOCIALACCOUNT_PROVIDERS["github"]["OAUTH_PKCE_ENABLED"] is True
+
+    # Ensure a test client_id is configured so allauth builds the authorize URL
+    settings.SOCIALACCOUNT_PROVIDERS = {
+        "github": {
+            "SCOPE": [],
+            "OAUTH_PKCE_ENABLED": True,
+            "APP": {"client_id": "test-client-id", "secret": "test-secret", "key": ""},
+        }
+    }
+
+    # GET must render styled Cairn confirmation page (200), NOT redirect directly to GitHub (blocks Login CSRF)
+    get_res = client.get("/accounts/github/login/")
+    assert get_res.status_code == 200
+    assert "github.com/login/oauth/authorize" not in (get_res.headers.get("Location") or "")
+    assert "/static/css/auth.css" in get_res.content.decode("utf-8")
+    assert "Public profile only" in get_res.content.decode("utf-8")
+
+    # Stylesheet itself must be served (200 text/css) via WhiteNoise
+    css_res = client.get("/static/css/auth.css")
+    assert css_res.status_code == 200
+    assert "text/css" in (css_res.headers.get("Content-Type") or "")
+
+    # POST initiates OAuth redirect with PKCE code_challenge & zero scope
+    post_res = client.post("/accounts/github/login/")
+    assert post_res.status_code == 302
+    loc = post_res.headers["Location"]
+    parsed = urlparse(loc)
+    qs = parse_qs(parsed.query)
+    assert parsed.netloc == "github.com"
+    assert "code_challenge" in qs
+    assert qs.get("code_challenge_method") == ["S256"]
+    assert "repo" not in (qs.get("scope", [""])[0])
+    assert "read:user" not in (qs.get("scope", [""])[0])
+
+
+@pytest.mark.django_db(transaction=True)
+def test_logout_all_devices_revokes_all_sessions(api_client, client):
+    """POST /api/v1/auth/logout-all requires CSRF and invalidates all active sessions."""
+    from django.contrib.sessions.models import Session
+    from django.db import connection
+    from django.test import Client
+
+    user = User.objects.create_user(username="multi_dev", github_id=5099)
+
+    # Create two separate active sessions for the same user
+    client.force_login(user)
+    s1 = client.cookies["sessionid"].value
+    client2 = Client()
+    client2.force_login(user)
+    s2 = client2.cookies["sessionid"].value
+    connection.close()
+
+    assert Session.objects.filter(session_key__in=[s1, s2]).count() == 2
+
+    api_client.cookies.set("sessionid", s1)
+    me_res = api_client.get("/api/v1/auth/me")
+    assert me_res.status_code == 200
+    csrf = api_client.cookies.get("csrftoken")
+
+    # Without CSRF -> 403
+    assert api_client.post("/api/v1/auth/logout-all").status_code == 403
+
+    # With CSRF -> 200 and both server-side sessions are deleted
+    res = api_client.post("/api/v1/auth/logout-all", headers={"X-CSRFToken": csrf})
+    assert res.status_code == 200
+    assert res.json()["ok"] is True
+    assert res.json()["revoked"] >= 2
+    assert Session.objects.filter(session_key__in=[s1, s2]).count() == 0

@@ -1,0 +1,25 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in cancelled · Cairn</title>
+  <link rel="stylesheet" href="{% static 'css/auth.css' %}" />
+</head>
+<body>
+  <main class="auth-card">
+    <a href="/" class="brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span>cairn</span>
+    </a>
+
+    <h1>Sign in cancelled</h1>
+    <p>
+      You cancelled signing in with GitHub. No account changes were made.
+    </p>
+
+    <a href="/login" class="btn-primary">Back to Sign in</a>
+    <a href="/" class="footer-link">Return to Cairn home</a>
+  </main>
+</body>
+</html>
