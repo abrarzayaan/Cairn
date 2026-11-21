@@ -2,6 +2,7 @@ from django.core.exceptions import ValidationError
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from api.deps import get_current_user, require_user, verify_csrf
+from api.rate_limit import write_rate_limiter
 from api.routers.books import serialize_book_summary, serialize_chapter_ref
 from api.schemas.notes import (
     BacklinkItem,
@@ -130,6 +131,7 @@ def post_note(
     _csrf: None = Depends(verify_csrf),
 ):
     """Create a new note."""
+    write_rate_limiter.check(f"write:{user.id}")
     try:
         note = create_note(
             author=user,
@@ -323,6 +325,7 @@ def patch_note(
     _csrf: None = Depends(verify_csrf),
 ):
     """Update note fields. Only owner can update."""
+    write_rate_limiter.check(f"write:{user.id}")
     try:
         note = update_note(
             author=user,
@@ -387,6 +390,7 @@ def remove_note(
     _csrf: None = Depends(verify_csrf),
 ):
     """Permanently delete note. Only owner can delete."""
+    write_rate_limiter.check(f"write:{user.id}")
     try:
         delete_note(author=user, note_id=note_id)
     except Note.DoesNotExist:

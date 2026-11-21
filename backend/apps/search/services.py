@@ -6,7 +6,7 @@ from django.db import connection
 from django.db.models import Count, F, Q
 
 from apps.accounts.models import User
-from apps.notes.models import Book, Note, Tag
+from apps.notes.models import Book, Note, NoteLink, Tag
 from apps.notes.services.books import list_categories_with_counts
 from apps.notes.services.notes import (
     published_books_q,
@@ -54,6 +54,34 @@ def _serialize_book_hit(book: Book) -> dict:
         "created_at": book.created_at,
         "updated_at": book.updated_at,
     }
+
+
+_WIKILINK_RE = re.compile(r"\[\[(?:(?:prereq|deep):)?([^\]\|]{1,200})(?:\|([^\]]{1,100}))?\]\]")
+
+
+def _redact_private_wikilinks(note: Note, content_md: str, viewer) -> str:
+    """Replace wikilinks pointing to notes the viewer cannot access with 'Private note'."""
+    if not content_md or "[[" not in content_md:
+        return content_md or ""
+    if viewer and getattr(viewer, "is_authenticated", False) and viewer.id == note.author_id:
+        return content_md
+
+    hidden_refs = {
+        ref.strip().lower()
+        for ref in NoteLink.objects.filter(source=note, target__isnull=False)
+        .exclude(target__in=Note.objects.filter(visible_notes_q(viewer)))
+        .values_list("target_ref", flat=True)
+    }
+    if not hidden_refs:
+        return content_md
+
+    def _replace(match: re.Match) -> str:
+        ref = match.group(1).strip().lower()
+        if ref in hidden_refs:
+            return "Private note"
+        return match.group(0)
+
+    return _WIKILINK_RE.sub(_replace, content_md)
 
 
 def _build_snippet(content_md: str, query: str, max_len: int = 160) -> str:
@@ -137,7 +165,8 @@ def _score_note_python(note: Note, query_text: str) -> float:
     return score
 
 
-def _serialize_search_hit(note: Note, query_text: str) -> dict:
+def _serialize_search_hit(note: Note, query_text: str, viewer=None) -> dict:
+    safe_md = _redact_private_wikilinks(note, note.content_md, viewer)
     return {
         "id": note.id,
         "title": note.title,
@@ -146,7 +175,7 @@ def _serialize_search_hit(note: Note, query_text: str) -> dict:
         "visibility": note.visibility,
         "is_published": note.is_published,
         "tags": [t.name for t in note.tags.all()],
-        "snippet": _build_snippet(note.content_md, query_text),
+        "snippet": _build_snippet(safe_md, query_text),
         "book_id": note.book_id,
         "book_title": note.book.title if note.book else None,
         "book_slug": note.book.slug if note.book else None,
@@ -374,7 +403,7 @@ def search_notes(
             "total": total,
             "limit": limit,
             "offset": offset,
-            "results": [_serialize_search_hit(n, "") for n in items],
+            "results": [_serialize_search_hit(n, "", viewer=viewer) for n in items],
             "books": books_out,
             "categories": categories_out,
             "users": users_out,
@@ -397,7 +426,7 @@ def search_notes(
             "total": total,
             "limit": limit,
             "offset": offset,
-            "results": [_serialize_search_hit(n, query_text) for n in items],
+            "results": [_serialize_search_hit(n, query_text, viewer=viewer) for n in items],
             "books": books_out,
             "categories": categories_out,
             "users": users_out,
@@ -418,15 +447,15 @@ def search_notes(
         "total": total,
         "limit": limit,
         "offset": offset,
-        "results": [_serialize_search_hit(n, query_text) for n in page_items],
+        "results": [_serialize_search_hit(n, query_text, viewer=viewer) for n in page_items],
         "books": books_out,
         "categories": categories_out,
         "users": users_out,
     }
 
 
-def _serialize_workspace_note(note: Note) -> dict:
-    hit = _serialize_search_hit(note, "")
+def _serialize_workspace_note(note: Note, viewer=None) -> dict:
+    hit = _serialize_search_hit(note, "", viewer=viewer)
     hit["prereq_count"] = getattr(note, "_prereq_count", 0)
     return hit
 
@@ -446,7 +475,7 @@ def get_home_feed(viewer) -> dict:
         )
         .order_by("-updated_at", "-id")
     )
-    recent_public = [_serialize_workspace_note(n) for n in public_qs[:12]]
+    recent_public = [_serialize_workspace_note(n, viewer=viewer) for n in public_qs[:12]]
 
     public_books_qs = (
         Book.objects.filter(published_books_q())
@@ -555,7 +584,7 @@ def get_user_profile(viewer, username: str) -> dict | None:
         )
         .order_by("-updated_at", "-id")
     )
-    notes = [_serialize_workspace_note(n) for n in notes_qs]
+    notes = [_serialize_workspace_note(n, viewer=viewer) for n in notes_qs]
 
     topic_counts: dict[str, int] = {}
     for n in notes:

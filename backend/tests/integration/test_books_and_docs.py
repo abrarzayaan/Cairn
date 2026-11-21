@@ -69,13 +69,13 @@ def test_categories_seeded_and_custom_creation(api_client, client):
     assert created2.status_code == 201
     assert created2.json()["slug"] == "distributed-systems"
 
-    # User2 cannot patch User's category
+    # User2 cannot patch User's category (returns 404 to prevent existence oracle)
     patch_forbidden = api_client.patch(
         f"/api/v1/categories/{cat_id}",
         json={"name": "Hacked Cat"},
         headers=headers2,
     )
-    assert patch_forbidden.status_code == 400
+    assert patch_forbidden.status_code == 404
 
     # Switch back to user: user can patch their own category
     headers = _auth_client(api_client, client, user)
@@ -96,13 +96,13 @@ def test_categories_seeded_and_custom_creation(api_client, client):
     )
     assert dup_rename.status_code == 400
 
-    # User2 cannot delete User's category
+    # User2 cannot delete User's category (returns 404 to prevent existence oracle)
     headers2 = _auth_client(api_client, client, user2)
     del_forbidden = api_client.delete(
         f"/api/v1/categories/{cat_id}",
         headers=headers2,
     )
-    assert del_forbidden.status_code == 400
+    assert del_forbidden.status_code == 404
 
     # Deleting category containing books is rejected
     headers = _auth_client(api_client, client, user)

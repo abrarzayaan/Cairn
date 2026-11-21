@@ -77,7 +77,7 @@ def update_category(
     """Update a personal category owned by the author."""
     category = Category.objects.filter(id=category_id, author=author).first()
     if not category:
-        raise ValidationError("Category not found on your desk.")
+        raise Category.DoesNotExist("Category not found on your desk.")
 
     if name is not None:
         clean_name = " ".join(name.strip().split())
@@ -110,7 +110,7 @@ def delete_category(author, category_id: int) -> bool:
     """Delete a personal category if it contains no books."""
     category = Category.objects.filter(id=category_id, author=author).first()
     if not category:
-        raise ValidationError("Category not found on your desk.")
+        raise Category.DoesNotExist("Category not found on your desk.")
 
     if category.books.exists():
         raise ValidationError("Cannot delete category containing books. Reassign or delete its books first.")

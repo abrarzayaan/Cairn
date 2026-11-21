@@ -37,33 +37,33 @@ Tick `[x]` only after you have verified it, not when you believe it is done.
 
 ## 2. Authentication and sessions
 
-- [ ] **[R]** GitHub OAuth is the only sign-in for normal users
-- [ ] **[R]** OAuth `state` parameter is verified (allauth default; confirm not disabled)
-- [ ] **[R]** Scope is `read:user` only; no email scope
-- [ ] **[R]** GitHub access token is **not stored** (`SOCIALACCOUNT_STORE_TOKENS = False`)
-- [ ] **[R]** Identity key is the numeric GitHub ID, not the username (usernames can be reassigned)
-- [ ] **[R]** Banned users cannot sign in and existing sessions are deleted on ban
-- [ ] **[R]** Session cookie flags: `HttpOnly`, `Secure`, `SameSite=Lax`
-- [ ] **[R]** Session lifetime limited (14 days rolling) and rotated on login
-- [ ] **[R]** Logout is POST-only and destroys the server-side session
-- [ ] **[R]** No auth token or session id is ever stored in `localStorage`/`sessionStorage`
+- [x] **[R]** GitHub OAuth is the only sign-in for normal users
+- [x] **[R]** OAuth `state` parameter is verified (allauth default; confirm not disabled)
+- [x] **[R]** Scope is `read:user` only; no email scope
+- [x] **[R]** GitHub access token is **not stored** (`SOCIALACCOUNT_STORE_TOKENS = False`)
+- [x] **[R]** Identity key is the numeric GitHub ID, not the username (usernames can be reassigned)
+- [x] **[R]** Banned users cannot sign in and existing sessions are deleted on ban
+- [x] **[R]** Session cookie flags: `HttpOnly`, `Secure`, `SameSite=Lax`
+- [x] **[R]** Session lifetime limited (14 days rolling) and rotated on login
+- [x] **[R]** Logout is POST-only and destroys the server-side session
+- [x] **[R]** No auth token or session id is ever stored in `localStorage`/`sessionStorage`
 - [ ] **[S]** "Sign out everywhere" option in settings
 - [ ] **[S]** Open redirect check: `next` parameter only allows same-site relative paths
 
 ## 3. Authorization (access control)
 
-- [ ] **[R]** Every note read, write, delete goes through a service that checks ownership or visibility
-- [ ] **[R]** Single function `visible_notes_q(viewer)` is used by every query that returns notes (pages, profile, backlinks, path, preview, export), and `published_notes_q()` / `published_books_q()` is used by every global discovery query (global search `scope=all`, home feed, tag pages, sitemap)
-- [ ] **[R]** Personal `Category` records are strictly scoped to `author`; non-owners cannot edit/delete another user's categories, and categories with only `private` books are never exposed on `/u/<user>`
-- [ ] **[R]** `private` notes/books can never have `is_published=True` (enforced in services and DB check constraint); switching `public/published → private` resets `is_published=False` and removes them from every surface immediately
-- [ ] **[R]** Unpublished `public` notes/books never appear in global search (`scope=all`), home feed, tag pages, or `sitemap.xml`
-- [ ] **[R]** Private and hidden notes return **404** for non-owners (never 403, never a different message)
-- [ ] **[R]** Revision endpoints are owner-only
-- [ ] **[R]** IDs in URLs/JSON are never trusted: always re-check the object belongs to the user
-- [ ] **[R]** Admin-only actions are not reachable through the public API
-- [ ] **[R]** Cross-author links only resolve to `public` + `ok` notes
-- [ ] **[R]** Banned user's public notes disappear from all surfaces
-- [ ] **[R]** Changing Public/Published → Private removes the note from search, profile, backlinks, previews, and sitemap immediately; unpublishing (`Published → Public`) removes it from global search, home feed, tag pages, and sitemap immediately
+- [x] **[R]** Every note read, write, delete goes through a service that checks ownership or visibility
+- [x] **[R]** Single function `visible_notes_q(viewer)` is used by every query that returns notes (pages, profile, backlinks, path, preview, export), and `published_notes_q()` / `published_books_q()` is used by every global discovery query (global search `scope=all`, home feed, tag pages, sitemap)
+- [x] **[R]** Personal `Category` records are strictly scoped to `author`; non-owners cannot edit/delete another user's categories, and categories with only `private` books are never exposed on `/u/<user>`
+- [x] **[R]** `private` notes/books can never have `is_published=True` (enforced in services and DB check constraint); switching `public/published → private` resets `is_published=False` and removes them from every surface immediately
+- [x] **[R]** Unpublished `public` notes/books never appear in global search (`scope=all`), home feed, tag pages, or `sitemap.xml`
+- [x] **[R]** Private and hidden notes return **404** for non-owners (never 403, never a different message)
+- [x] **[R]** Revision endpoints are owner-only
+- [x] **[R]** IDs in URLs/JSON are never trusted: always re-check the object belongs to the user
+- [x] **[R]** Admin-only actions are not reachable through the public API
+- [x] **[R]** Cross-author links only resolve to `public` + `ok` notes
+- [x] **[R]** Banned user's public notes disappear from all surfaces
+- [x] **[R]** Changing Public/Published → Private removes the note from search, profile, backlinks, previews, and sitemap immediately; unpublishing (`Published → Public`) removes it from global search, home feed, tag pages, and sitemap immediately
 
 ## 4. Private-leak test matrix (automated, in `tests/security/`)
 
@@ -96,31 +96,31 @@ For each surface, assert that B and anon learn nothing about `P` (not title, not
 | Public (unpublished) `Q` in global search / home / tags / sitemap | shown in `scope=mine` | excluded from `scope=all` global search, home feed, tag pages, and sitemap; still visible on `/u/A/` and `/u/A/Q/` |
 | Personal category with only `P` (private) | visible in own desk | hidden from `/u/A/` and non-owner API calls (404 on edit/delete) |
 
-- [ ] **[R]** Matrix implemented as parametrized pytest and runs on every PR
+- [x] **[R]** Matrix implemented as parametrized pytest and runs on every PR
 
 ## 5. Input validation and injection
 
-- [ ] **[R]** All API input validated with Pydantic (types, lengths, enums)
-- [ ] **[R]** Title max 120, content max 100,000, bio max 280, tags max 5 x 30 chars, report details max 500, enforced on the server
-- [ ] **[R]** Slug generated/validated against `[a-z0-9-]`, no path characters
-- [ ] **[R]** Username and slug from URLs are looked up via ORM only
-- [ ] **[R]** No raw SQL with string formatting (grep for `.raw(`, `.extra(`, `cursor.execute(f"`)
-- [ ] **[R]** Search query goes through `websearch_to_tsquery` with bound parameters
+- [x] **[R]** All API input validated with Pydantic (types, lengths, enums)
+- [x] **[R]** Title max 120, content max 100,000, bio max 280, tags max 5 x 30 chars, report details max 500, enforced on the server
+- [x] **[R]** Slug generated/validated against `[a-z0-9-]`, no path characters
+- [x] **[R]** Username and slug from URLs are looked up via ORM only
+- [x] **[R]** No raw SQL with string formatting (grep for `.raw(`, `.extra(`, `cursor.execute(f"`)
+- [x] **[R]** Search query goes through `websearch_to_tsquery` with bound parameters
 - [ ] **[S]** Search query length capped (e.g. 100 chars)
 - [ ] **[S]** Unicode normalization on usernames/slugs to avoid look-alike confusion
 
 ## 6. XSS and content safety
 
-- [ ] **[R]** Markdown renderer has raw HTML **disabled**
-- [ ] **[R]** Output sanitized with nh3 using an allow-list of tags and attributes
-- [ ] **[R]** URL schemes allowed: `http`, `https`, `mailto`, `#anchor` only
-- [ ] **[R]** Images are never embedded; `![](url)` becomes a text link
-- [ ] **[R]** External links have `rel="noopener noreferrer nofollow ugc"` and `target="_blank"`
-- [ ] **[R]** Wikilink rendering escapes the label and ref
-- [ ] **[R]** Wikilinks inside code spans/blocks are not processed
-- [ ] **[R]** Templates never use `|safe`/`mark_safe` except for renderer output
-- [ ] **[R]** Frontend JS never uses `innerHTML` with user-controlled strings
-- [ ] **[R]** XSS payload corpus test passes (list below)
+- [x] **[R]** Markdown renderer has raw HTML **disabled**
+- [x] **[R]** Output sanitized with nh3 using an allow-list of tags and attributes
+- [x] **[R]** URL schemes allowed: `http`, `https`, `mailto`, `#anchor` only
+- [x] **[R]** Images are never embedded; `![](url)` becomes a text link
+- [x] **[R]** External links have `rel="noopener noreferrer nofollow ugc"` and `target="_blank"`
+- [x] **[R]** Wikilink rendering escapes the label and ref
+- [x] **[R]** Wikilinks inside code spans/blocks are not processed
+- [x] **[R]** Templates never use `|safe`/`mark_safe` except for renderer output
+- [x] **[R]** Frontend JS never uses `innerHTML` with user-controlled strings
+- [x] **[R]** XSS payload corpus test passes (list below)
 - [ ] **[S]** Titles, tags, usernames, bios are escaped in every context (HTML, attribute, JS, URL, `<title>`, meta, JSON-LD)
 
 XSS corpus (minimum):
@@ -142,38 +142,38 @@ Every payload must render as inert text or a safe link.
 
 ## 7. CSRF
 
-- [ ] **[R]** Django CSRF middleware enabled for all HTML forms
-- [ ] **[R]** FastAPI mutating endpoints verify `X-CSRFToken` against the cookie/session
-- [ ] **[R]** No state-changing GET requests (logout, delete, hide are POST/DELETE)
-- [ ] **[R]** `CSRF_TRUSTED_ORIGINS` set to the real origin only
-- [ ] **[R]** CORS is **disabled** (API is same-origin)
-- [ ] **[R]** Test: mutating API call without a token returns 403
+- [x] **[R]** Django CSRF middleware enabled for all HTML forms
+- [x] **[R]** FastAPI mutating endpoints verify `X-CSRFToken` against the cookie/session
+- [x] **[R]** No state-changing GET requests (logout, delete, hide are POST/DELETE)
+- [x] **[R]** `CSRF_TRUSTED_ORIGINS` set to the real origin only
+- [x] **[R]** CORS is **disabled** (API is same-origin)
+- [x] **[R]** Test: mutating API call without a token returns 403
 
 ## 8. Security headers and transport
 
-- [ ] **[R]** HTTPS everywhere; HTTP redirects to HTTPS
-- [ ] **[R]** `Strict-Transport-Security` (start with 1 week, move to 1 year after verifying)
-- [ ] **[R]** `Content-Security-Policy` without `unsafe-inline` and without `unsafe-eval`:
+- [x] **[R]** HTTPS everywhere; HTTP redirects to HTTPS
+- [x] **[R]** `Strict-Transport-Security` (start with 1 week, move to 1 year after verifying)
+- [x] **[R]** `Content-Security-Policy` without `unsafe-inline` and without `unsafe-eval`:
   ```
   default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;
   font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self';
   form-action 'self' https://github.com; frame-ancestors 'none'
   ```
   (`form-action` includes GitHub only if the OAuth redirect needs it)
-- [ ] **[R]** `X-Content-Type-Options: nosniff`
-- [ ] **[R]** `Referrer-Policy: strict-origin-when-cross-origin` (or `same-origin`)
-- [ ] **[R]** `X-Frame-Options: DENY` / `frame-ancestors 'none'`
-- [ ] **[R]** `Permissions-Policy` disabling camera, mic, geolocation, etc.
+- [x] **[R]** `X-Content-Type-Options: nosniff`
+- [x] **[R]** `Referrer-Policy: strict-origin-when-cross-origin` (or `same-origin`)
+- [x] **[R]** `X-Frame-Options: DENY` / `frame-ancestors 'none'`
+- [x] **[R]** `Permissions-Policy` disabling camera, mic, geolocation, etc.
 - [ ] **[S]** Check with securityheaders.com and Mozilla Observatory, target A or better
-- [ ] **[S]** `Cache-Control: private, no-store` on authenticated pages and all API responses
+- [x] **[S]** `Cache-Control: private, no-store` on authenticated pages and all API responses
 
 ## 9. Rate limiting and abuse
 
-- [ ] **[R]** Limits from ARCHITECTURE.md section 12 implemented and tested (search, writes, render, reports, global per IP)
+- [x] **[R]** Limits from ARCHITECTURE.md section 12 implemented and tested (search, writes, render, reports, global per IP)
 - [ ] **[R]** Per-user caps: max notes per user (e.g. 5,000), max revisions kept per note (100)
-- [ ] **[R]** Request body size limit at proxy (e.g. 1 MB) and in app
-- [ ] **[R]** Reading-path limits enforced (depth 20, nodes 200)
-- [ ] **[R]** Pagination limits enforced (`limit <= 50`)
+- [x] **[R]** Request body size limit at proxy (e.g. 1 MB) and in app
+- [x] **[R]** Reading-path limits enforced (depth 20, nodes 200)
+- [x] **[R]** Pagination limits enforced (`limit <= 50`)
 - [ ] **[S]** New-account limits: a very new account can have at most N public notes per day (spam brake)
 - [ ] **[S]** Duplicate-report suppression (same user + note)
 - [ ] **[S]** Expensive endpoints (`/render`) cached by content hash

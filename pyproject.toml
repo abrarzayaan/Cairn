@@ -19,6 +19,7 @@ dependencies = [
     "whitenoise>=6.8.2,<7.0",
     "django-otp>=1.5.4,<2.0",
     "python-dotenv>=1.0.1,<2.0",
+    "redis>=5.2.0,<6.0",
     "requests>=2.32.3,<3.0",
 ]
 

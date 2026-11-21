@@ -54,6 +54,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "apps.core.middleware.SecurityHeadersMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -64,6 +65,10 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "allauth.account.middleware.AccountMiddleware",
 ]
+
+X_FRAME_OPTIONS = "DENY"
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+DATA_UPLOAD_MAX_MEMORY_SIZE = 1048576  # 1 MB
 
 ROOT_URLCONF = "config.urls"
 

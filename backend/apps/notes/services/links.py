@@ -163,11 +163,12 @@ def resolve_wikilinks_html(content_html: str, source_note: Note, viewer) -> str:
                 node.attrs["data-state"] = "ok"
             else:
                 base_classes.append("wikilink--private")
-                node.attrs["href"] = "#private"
-                node.attrs["data-state"] = "private"
-                node.attrs["title"] = "Private note"
-                if "data-note-id" in node.attrs:
-                    del node.attrs["data-note-id"]
+                cls_str = " ".join(base_classes)
+                node.replace_with(
+                    f'<a href="#private" data-type="{link_type}" data-state="private" '
+                    f'title="Private note" class="{cls_str}">Private note</a>'
+                )
+                continue
         else:
             base_classes.append("wikilink--missing")
             node.attrs["href"] = "#missing"

@@ -211,12 +211,12 @@ Legend: **P** = priority (M must, S should, C could)
 
 ## M10. Security hardening 
 
-- [ ] T10.1 Complete SECURITY_CHECK.md, every "Required" item (M)
-- [ ] T10.2 CSP, HSTS, other security headers (M)
-- [ ] T10.3 Rate limiting (Redis) per ARCHITECTURE.md section 12 (M)
-- [ ] T10.4 Private-leak test matrix in `tests/security/` runs in CI (M)
-- [ ] T10.5 `pip-audit` and `npm audit` in CI (M)
-- [ ] T10.6 Review of logs for note-content or token leakage (M)
+- [x] T10.1 Complete SECURITY_CHECK.md, every "Required" item (M)
+- [x] T10.2 CSP, HSTS, other security headers (M)
+- [x] T10.3 Rate limiting (Redis) per ARCHITECTURE.md section 12 (M)
+- [x] T10.4 Private-leak test matrix in `tests/security/` runs in CI (M)
+- [x] T10.5 `pip-audit` and `npm audit` in CI (M)
+- [x] T10.6 Review of logs for note-content or token leakage (M)
 
 **Done when:** SECURITY_CHECK.md Required items are all ticked.
 
