@@ -24,6 +24,7 @@ from apps.notes.services.books import (
     get_book_chapters,
     get_visible_book,
     list_categories_with_counts,
+    list_suggested_categories,
     reorder_book_chapters,
     update_book,
     update_category,
@@ -98,8 +99,14 @@ def get_categories(
     username: str | None = Query(default=None),
     viewer: User | None = Depends(get_current_user),
 ):
-    """List personal categories with book counts (own desk or a user's desk)."""
+    """List personal desk categories with book counts (own desk or a user's desk)."""
     return [CategoryOut(**c) for c in list_categories_with_counts(viewer, username=username)]
+
+
+@router.get("/categories/suggested", response_model=list[CategoryOut])
+def get_suggested_categories():
+    """List global default category suggestions (never exposes custom private user categories)."""
+    return [CategoryOut(**c) for c in list_suggested_categories()]
 
 
 @router.post("/categories", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
@@ -108,7 +115,7 @@ def post_category(
     user: User = Depends(require_user),
     _csrf: None = Depends(verify_csrf),
 ):
-    """Create a personal topic category on the user's desk."""
+    """Add a canonical category to the user's personal desk."""
     try:
         cat = create_category(author=user, name=data.name, description=data.description)
     except ValidationError as exc:
@@ -120,8 +127,8 @@ def post_category(
         id=cat.id,
         name=cat.name,
         slug=cat.slug,
-        description=cat.description,
-        book_count=0,
+        description=getattr(cat, "desk_description", cat.description),
+        book_count=Book.objects.filter(author=user, category=cat).count(),
     )
 
 
@@ -132,7 +139,7 @@ def patch_category(
     user: User = Depends(require_user),
     _csrf: None = Depends(verify_csrf),
 ):
-    """Update a personal category on the user's desk."""
+    """Update a personal desk category shelf."""
     try:
         cat = update_category(
             author=user,
@@ -154,8 +161,8 @@ def patch_category(
         id=cat.id,
         name=cat.name,
         slug=cat.slug,
-        description=cat.description,
-        book_count=cat.books.count(),
+        description=getattr(cat, "desk_description", cat.description),
+        book_count=Book.objects.filter(author=user, category=cat).count(),
     )
 
 

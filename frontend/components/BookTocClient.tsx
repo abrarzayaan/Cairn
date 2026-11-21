@@ -34,6 +34,7 @@ import {
   deleteBook,
   fetchCategories,
   fetchMe,
+  fetchSuggestedCategories,
   reorderBookChapters,
   updateBook,
 } from "@/lib/api";
@@ -79,7 +80,16 @@ export default function BookTocClient({
           initialBook.author_username.toLowerCase()
       ) {
         setIsOwner(true);
-        fetchCategories().then(setCategories);
+        Promise.all([fetchCategories(), fetchSuggestedCategories()]).then(
+          ([desk, suggested]) => {
+            const seen = new Set(desk.map((c) => c.id));
+            const merged = [
+              ...desk,
+              ...suggested.filter((c) => !seen.has(c.id)),
+            ];
+            setCategories(merged);
+          },
+        );
       }
     });
   }, [initialBook.author_username]);

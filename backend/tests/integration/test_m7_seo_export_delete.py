@@ -6,7 +6,14 @@ import pytest
 from apps.accounts.models import User
 from apps.moderation.models import Report
 from apps.moderation.services import ban_user, create_report, hide_book, hide_note
-from apps.notes.models import Book, Category, Note, NoteLink, NoteRevision, SlugHistory
+from apps.notes.models import (
+    Book,
+    Note,
+    NoteLink,
+    NoteRevision,
+    SlugHistory,
+    UserCategory,
+)
 from apps.notes.services.books import create_book, create_category
 from apps.notes.services.notes import create_note, update_note
 
@@ -290,9 +297,9 @@ def test_delete_account_with_confirmation_removes_all_owned_data(api_client, cli
     assert ok_res.status_code == 200
     assert ok_res.json() == {"ok": True}
 
-    # Verify all of Alice's data is permanently gone
+    # Verify all of Alice's data is permanently gone (canonical Category stays intact)
     assert not User.objects.filter(id=alice.id).exists()
-    assert not Category.objects.filter(author_id=alice.id).exists()
+    assert not UserCategory.objects.filter(user_id=alice.id).exists()
     assert not Book.objects.filter(author_id=alice.id).exists()
     assert not Note.objects.filter(author_id=alice.id).exists()
     assert not NoteRevision.objects.filter(note_id=note_a.id).exists()

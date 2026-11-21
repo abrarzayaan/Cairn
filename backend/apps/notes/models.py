@@ -15,14 +15,12 @@ class Tag(models.Model):
 
 
 class Category(models.Model):
-    author = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="categories",
-    )
+    """Canonical globally deduplicated topic category dictionary."""
+
     name = models.CharField(max_length=60)
-    slug = models.CharField(max_length=70)
+    slug = models.CharField(max_length=70, unique=True)
     description = models.CharField(max_length=200, default="", blank=True)
+    is_default = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -30,21 +28,50 @@ class Category(models.Model):
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(
-                fields=["author", "slug"],
-                name="categories_author_slug_unique",
-            ),
-            models.UniqueConstraint(
-                "author",
                 Lower("name"),
-                name="categories_author_name_lower_idx",
+                name="categories_name_lower_unique",
             ),
         ]
         indexes = [
-            models.Index(fields=["author", "name"], name="categories_author_idx"),
+            models.Index(fields=["is_default", "name"], name="categories_default_name_idx"),
         ]
 
     def __str__(self):
-        return f"{self.name} (@{self.author.username})"
+        return self.name
+
+
+class UserCategory(models.Model):
+    """Lazy personal desk shelf linking a user to a canonical Category."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="desk_categories",
+    )
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.PROTECT,
+        related_name="user_shelves",
+    )
+    description = models.CharField(max_length=200, default="", blank=True)
+    sort_order = models.SmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "user_categories"
+        ordering = ["sort_order", "category__name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "category"],
+                name="user_categories_user_cat_unique",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["user", "sort_order"], name="user_categories_user_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.category.name} (@{self.user.username})"
 
 
 class Book(models.Model):

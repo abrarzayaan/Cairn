@@ -176,20 +176,32 @@ CREATE UNIQUE INDEX users_username_lower_idx ON users (lower(username));
 
 Future-ready: `alias VARCHAR(40) NULL UNIQUE` can be added later for anonymous mode without breaking anything.
 
-### 6.1.1 `categories` (User-scoped desk shelves)
+### 6.1.1 `categories` (Canonical global taxonomy) & `user_categories` (Lazy desk shelves)
 
 ```sql
+-- Globally deduplicated canonical categories (zero duplicate strings across users)
 CREATE TABLE categories (
   id          BIGSERIAL PRIMARY KEY,
-  author_id   BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name        VARCHAR(60) NOT NULL,
-  slug        VARCHAR(70) NOT NULL,
+  slug        VARCHAR(70) UNIQUE NOT NULL,
   description VARCHAR(200) NOT NULL DEFAULT '',
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (author_id, slug)
+  is_default  BOOLEAN NOT NULL DEFAULT FALSE,  -- 8 shared default suggestions
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX categories_author_name_lower_idx ON categories (author_id, lower(name));
-CREATE INDEX categories_author_idx ON categories (author_id, name);
+CREATE UNIQUE INDEX categories_name_lower_unique ON categories (lower(name));
+CREATE INDEX categories_default_name_idx ON categories (is_default, name);
+
+-- Lazy personal desk shelves (created only when a user adds/uses a category)
+CREATE TABLE user_categories (
+  id          BIGSERIAL PRIMARY KEY,
+  user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  category_id BIGINT NOT NULL REFERENCES categories(id) ON DELETE PROTECT,
+  description VARCHAR(200) NOT NULL DEFAULT '',
+  sort_order  SMALLINT NOT NULL DEFAULT 0,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, category_id)
+);
+CREATE INDEX user_categories_user_idx ON user_categories (user_id, sort_order);
 ```
 
 ### 6.1.2 `books` (Documentation / Books)

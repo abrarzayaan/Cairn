@@ -3,7 +3,7 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.utils.text import slugify
 
-from apps.notes.models import Book, Category, Note
+from apps.notes.models import Book, Category, Note, UserCategory
 from apps.notes.services.notes import visible_books_q, visible_notes_q
 
 PRESET_CATEGORIES = [
@@ -18,112 +18,157 @@ PRESET_CATEGORIES = [
 ]
 
 
-def ensure_starter_categories(user) -> list[Category]:
-    """Seed starter personal categories for a user's desk if they have none."""
-    if not user or not user.is_authenticated:
-        return []
+def ensure_default_categories() -> list[Category]:
+    """Ensure the 8 global default canonical categories exist once in `categories`."""
     cats = []
     for name, slug, description in PRESET_CATEGORIES:
-        cat, _ = Category.objects.get_or_create(
-            author=user,
+        cat, created = Category.objects.get_or_create(
             slug=slug,
-            defaults={"name": name, "description": description},
+            defaults={"name": name, "description": description, "is_default": True},
         )
+        if not created and not cat.is_default:
+            cat.is_default = True
+            cat.save(update_fields=["is_default"])
         cats.append(cat)
     return cats
 
 
-def ensure_preset_categories() -> None:
-    """Backwards-compatible helper: ensures starter categories exist for all existing users."""
-    from apps.accounts.models import User
-    for u in User.objects.all():
-        ensure_starter_categories(u)
+def list_suggested_categories() -> list[dict]:
+    """Return global default category suggestions (never exposes arbitrary private user categories)."""
+    if not Category.objects.filter(is_default=True).exists():
+        ensure_default_categories()
+    qs = Category.objects.filter(is_default=True).order_by("name")
+    return [
+        {
+            "id": cat.id,
+            "name": cat.name,
+            "slug": cat.slug,
+            "description": cat.description,
+            "book_count": 0,
+        }
+        for cat in qs
+    ]
 
 
-def create_category(author, name: str, description: str = "") -> Category:
-    """Create a personal topic category scoped to the author's desk."""
-    if not author or not author.is_authenticated:
-        raise ValidationError("Authentication required to create a category.")
-
+def _get_or_create_canonical_category(name: str, description: str = "") -> Category:
+    """Resolve or create a globally deduplicated Category row by slug / case-insensitive name."""
     clean_name = " ".join(name.strip().split())
     if not clean_name or len(clean_name) > 60:
         raise ValidationError("Category name is required and must be 60 characters or fewer.")
-
-    clean_desc = description.strip()
-    if len(clean_desc) > 200:
-        raise ValidationError("Description must be 200 characters or fewer.")
 
     slug = slugify(clean_name)[:70]
     if not slug:
         raise ValidationError("Category name must contain letters or numbers.")
 
-    if Category.objects.filter(author=author).filter(Q(name__iexact=clean_name) | Q(slug=slug)).exists():
-        raise ValidationError("A category with this name already exists on your desk.")
+    existing = Category.objects.filter(Q(slug=slug) | Q(name__iexact=clean_name)).first()
+    if existing:
+        return existing
 
     return Category.objects.create(
-        author=author,
         name=clean_name,
         slug=slug,
-        description=clean_desc,
+        description=description.strip()[:200],
+        is_default=False,
     )
 
 
+@transaction.atomic
+def create_category(author, name: str, description: str = "") -> Category:
+    """Attach a canonical Category to the author's personal desk (creating the canonical row only if new)."""
+    if not author or not author.is_authenticated:
+        raise ValidationError("Authentication required to create a category.")
+
+    clean_desc = description.strip()
+    if len(clean_desc) > 200:
+        raise ValidationError("Description must be 200 characters or fewer.")
+
+    canonical = _get_or_create_canonical_category(name, description=clean_desc)
+
+    if UserCategory.objects.filter(user=author, category=canonical).exists():
+        raise ValidationError("A category with this name already exists on your desk.")
+
+    UserCategory.objects.create(
+        user=author,
+        category=canonical,
+        description=clean_desc,
+    )
+    # Attach desk description for serializer convenience without mutating global Category
+    canonical.desk_description = clean_desc
+    return canonical
+
+
+@transaction.atomic
 def update_category(
     author,
     category_id: int,
     name: str | None = None,
     description: str | None = None,
 ) -> Category:
-    """Update a personal category owned by the author."""
-    category = Category.objects.filter(id=category_id, author=author).first()
-    if not category:
+    """Update a personal desk shelf. Renaming re-points author's shelf & books to a canonical Category."""
+    shelf = (
+        UserCategory.objects.select_related("category")
+        .filter(user=author, category_id=category_id)
+        .first()
+    )
+    if not shelf:
         raise Category.DoesNotExist("Category not found on your desk.")
 
-    if name is not None:
-        clean_name = " ".join(name.strip().split())
-        if not clean_name or len(clean_name) > 60:
-            raise ValidationError("Category name is required and must be 60 characters or fewer.")
-        slug = slugify(clean_name)[:70]
-        if not slug:
-            raise ValidationError("Category name must contain letters or numbers.")
-        if (
-            Category.objects.filter(author=author)
-            .filter(Q(name__iexact=clean_name) | Q(slug=slug))
-            .exclude(id=category.id)
-            .exists()
-        ):
-            raise ValidationError("A category with this name already exists on your desk.")
-        category.name = clean_name
-        category.slug = slug
-
+    clean_desc = shelf.description
     if description is not None:
         clean_desc = description.strip()
         if len(clean_desc) > 200:
             raise ValidationError("Description must be 200 characters or fewer.")
-        category.description = clean_desc
 
-    category.save()
-    return category
+    target_cat = shelf.category
+    if name is not None:
+        clean_name = " ".join(name.strip().split())
+        if not clean_name or len(clean_name) > 60:
+            raise ValidationError("Category name is required and must be 60 characters or fewer.")
+        new_slug = slugify(clean_name)[:70]
+        if not new_slug:
+            raise ValidationError("Category name must contain letters or numbers.")
+
+        if new_slug != shelf.category.slug:
+            target_cat = _get_or_create_canonical_category(clean_name, description=clean_desc)
+            if (
+                UserCategory.objects.filter(user=author, category=target_cat)
+                .exclude(id=shelf.id)
+                .exists()
+            ):
+                raise ValidationError("A category with this name already exists on your desk.")
+            # Re-point ONLY this author's books from the old category to the target canonical category
+            Book.objects.filter(author=author, category_id=shelf.category_id).update(
+                category=target_cat
+            )
+            shelf.category = target_cat
+
+    shelf.description = clean_desc
+    shelf.save(update_fields=["category", "description"])
+    target_cat.desk_description = clean_desc
+    return target_cat
 
 
+@transaction.atomic
 def delete_category(author, category_id: int) -> bool:
-    """Delete a personal category if it contains no books."""
-    category = Category.objects.filter(id=category_id, author=author).first()
-    if not category:
+    """Remove an empty category shelf from the author's personal desk (shared canonical row stays intact)."""
+    shelf = UserCategory.objects.filter(user=author, category_id=category_id).first()
+    if not shelf:
         raise Category.DoesNotExist("Category not found on your desk.")
 
-    if category.books.exists():
-        raise ValidationError("Cannot delete category containing books. Reassign or delete its books first.")
+    if Book.objects.filter(author=author, category_id=category_id).exists():
+        raise ValidationError(
+            "Cannot delete category containing books. Reassign or delete its books first."
+        )
 
-    category.delete()
+    shelf.delete()
     return True
 
 
 def list_categories_with_counts(viewer, username: str | None = None) -> list[dict]:
-    """Return personal categories with visible book counts.
+    """Return a user's personal desk shelves (`UserCategory`) with their visible book counts.
 
-    - If username provided: lists that user's visible categories (hiding private-only categories for others).
-    - If no username: lists viewer's own desk categories (seeds starters if empty).
+    - Starts cleanly empty for new users (zero forced starter rows).
+    - Non-owners never see empty shelves or shelves containing only private/hidden books.
     """
     from apps.accounts.models import User
 
@@ -140,35 +185,35 @@ def list_categories_with_counts(viewer, username: str | None = None) -> list[dic
 
     is_owner = bool(viewer and viewer.is_authenticated and viewer.id == target_user.id)
 
-    # Seed starter categories for own desk if none exist
-    if is_owner and not Category.objects.filter(author=target_user).exists():
-        ensure_starter_categories(target_user)
+    book_filter = Q(category__books__author_id=target_user.id)
+    if not is_owner:
+        book_filter = book_filter & Q(
+            category__books__visibility="public",
+            category__books__moderation="ok",
+        )
 
-    visible_book_filter = Q(
-        books__visibility="public",
-        books__moderation="ok",
-        books__author__is_banned=False,
+    qs = (
+        UserCategory.objects.filter(user=target_user)
+        .select_related("category")
+        .annotate(
+            book_count=Count("category__books", filter=book_filter, distinct=True),
+        )
+        .order_by("sort_order", "category__name")
     )
-    if is_owner:
-        visible_book_filter = visible_book_filter | Q(books__author_id=target_user.id)
 
-    qs = Category.objects.filter(author=target_user).annotate(
-        book_count=Count("books", filter=visible_book_filter, distinct=True),
-    ).order_by("name")
-
-    # Non-owners must NEVER see empty categories or categories with only private books
+    # Non-owners must NEVER see empty shelves or shelves with only private books
     if not is_owner:
         qs = qs.filter(book_count__gt=0)
 
     return [
         {
-            "id": cat.id,
-            "name": cat.name,
-            "slug": cat.slug,
-            "description": cat.description,
-            "book_count": cat.book_count,
+            "id": shelf.category.id,
+            "name": shelf.category.name,
+            "slug": shelf.category.slug,
+            "description": shelf.description or shelf.category.description,
+            "book_count": shelf.book_count,
         }
-        for cat in qs
+        for shelf in qs
     ]
 
 
@@ -198,6 +243,38 @@ def generate_unique_book_slug(
         suffix += 1
 
 
+def _resolve_category_for_author(author, category_id: int | None) -> Category:
+    """Resolve a category the author is allowed to assign a book to, and lazily link it to their desk.
+
+    Allowed targets:
+    - Any category already on `author`'s desk (`UserCategory`), OR
+    - Any global default category (`is_default=True`).
+    Arbitrary custom categories created by other users cannot be selected by raw ID.
+    """
+    if category_id is not None:
+        category = (
+            Category.objects.filter(
+                Q(id=category_id)
+                & (Q(is_default=True) | Q(user_shelves__user=author))
+            )
+            .distinct()
+            .first()
+        )
+        if not category:
+            raise ValidationError("Category not found on your desk.")
+    else:
+        ensure_default_categories()
+        category = Category.objects.filter(slug="general").first()
+        if not category:
+            category = Category.objects.create(
+                name="General", slug="general", is_default=True
+            )
+
+    UserCategory.objects.get_or_create(user=author, category=category)
+    return category
+
+
+@transaction.atomic
 def create_book(
     author,
     title: str,
@@ -207,7 +284,7 @@ def create_book(
     is_published: bool = False,
     custom_slug: str | None = None,
 ) -> Book:
-    """Create a documentation book under a personal category on author's desk."""
+    """Create a documentation book under a canonical category and lazily link it to author's desk."""
     clean_title = title.strip()
     if not clean_title or len(clean_title) > 120:
         raise ValidationError("Book title is required and must be 120 characters or fewer.")
@@ -223,18 +300,7 @@ def create_book(
         raise ValidationError("Private books cannot be published.")
 
     resolved_published = is_published if visibility == "public" else False
-
-    if category_id is not None:
-        category = Category.objects.filter(id=category_id, author=author).first()
-        if not category:
-            raise ValidationError("Category not found on your desk.")
-    else:
-        category = Category.objects.filter(author=author, slug="general").first()
-        if not category:
-            ensure_starter_categories(author)
-            category = Category.objects.filter(author=author, slug="general").first()
-        if not category:
-            category = Category.objects.create(author=author, name="General", slug="general")
+    category = _resolve_category_for_author(author, category_id)
 
     if Book.objects.filter(author=author, title__iexact=clean_title).exists():
         raise ValidationError("You already have a book with this title.")
@@ -251,6 +317,7 @@ def create_book(
     )
 
 
+@transaction.atomic
 def update_book(
     author,
     book_id: int,
@@ -277,10 +344,7 @@ def update_book(
         book.title = clean_title
 
     if category_id is not None:
-        category = Category.objects.filter(id=category_id, author=author).first()
-        if not category:
-            raise ValidationError("Category not found on your desk.")
-        book.category = category
+        book.category = _resolve_category_for_author(author, category_id)
 
     if description is not None:
         clean_desc = description.strip()
@@ -311,7 +375,6 @@ def update_book(
         )
 
     book.save()
-    return book
     return book
 
 
@@ -376,4 +439,3 @@ def reorder_book_chapters(author, book_id: int, ordered_note_ids: list[int]) -> 
                 note.save(update_fields=["sequence"])
 
     return ordered
-

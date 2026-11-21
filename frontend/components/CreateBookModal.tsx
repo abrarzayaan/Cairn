@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BookOpen, FolderPlus, Globe, Lock } from "lucide-react";
 import {
   BookSummary,
   Category,
   createBook,
   createCategory,
+  fetchSuggestedCategories,
 } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import {
@@ -37,6 +38,7 @@ export default function CreateBookModal({
   onCreated,
 }: CreateBookModalProps) {
   const [localCats, setLocalCats] = useState<Category[]>(categories);
+  const [suggestedCats, setSuggestedCats] = useState<Category[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState<number | "">(
@@ -48,8 +50,32 @@ export default function CreateBookModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!open) return;
+    setLocalCats(categories);
+    fetchSuggestedCategories().then((defaults) => {
+      setSuggestedCats(defaults);
+      setCategoryId((prev) => {
+        if (prev) return prev;
+        if (defaultCategoryId) return defaultCategoryId;
+        if (categories[0]?.id) return categories[0].id;
+        return defaults[0]?.id || "";
+      });
+    });
+  }, [open, categories, defaultCategoryId]);
+
   const activeCategories =
     localCats.length >= categories.length ? localCats : categories;
+
+  const extraSuggested = useMemo(() => {
+    const deskIds = new Set(activeCategories.map((c) => c.id));
+    return suggestedCats.filter((c) => !deskIds.has(c.id));
+  }, [activeCategories, suggestedCats]);
+
+  const allPickable = useMemo(
+    () => [...activeCategories, ...extraSuggested],
+    [activeCategories, extraSuggested],
+  );
 
   const handleCreateCategory = async () => {
     if (!newCatName.trim()) return;
@@ -57,8 +83,8 @@ export default function CreateBookModal({
     setBusy(true);
     try {
       const cat = await createCategory({ name: newCatName.trim() });
-      const next = [...activeCategories, cat].sort((a, b) =>
-        a.name.localeCompare(b.name),
+      const next = [...activeCategories.filter((c) => c.id !== cat.id), cat].sort(
+        (a, b) => a.name.localeCompare(b.name),
       );
       setLocalCats(next);
       setCategoryId(cat.id);
@@ -91,10 +117,10 @@ export default function CreateBookModal({
         visibility,
         is_published,
       });
-      const maybeNewCat = activeCategories.find(
-        (c) => c.id === created.category.id,
-      );
-      onCreated(created, maybeNewCat);
+      const resolvedCat =
+        allPickable.find((c) => c.id === created.category.id) ||
+        created.category;
+      onCreated(created, resolvedCat);
       setTitle("");
       setDescription("");
       setAccessState("private");
@@ -112,7 +138,7 @@ export default function CreateBookModal({
         <DialogHeader>
           <DialogTitle>New Documentation Book</DialogTitle>
           <DialogDescription>
-            Group sequential chapters under a desk category.
+            Pick a desk category, choose a suggested topic, or create your own.
           </DialogDescription>
         </DialogHeader>
 
@@ -126,7 +152,7 @@ export default function CreateBookModal({
           <div>
             <div className="mb-1.5 flex items-center justify-between">
               <label className="text-xs font-medium text-text-secondary">
-                Desk Category
+                Category
               </label>
               <button
                 type="button"
@@ -134,7 +160,7 @@ export default function CreateBookModal({
                 className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
               >
                 <FolderPlus className="h-3.5 w-3.5" />
-                {addingCat ? "Cancel" : "+ New Category"}
+                {addingCat ? "Cancel" : "+ Custom Category"}
               </button>
             </div>
 
@@ -144,7 +170,7 @@ export default function CreateBookModal({
                   type="text"
                   value={newCatName}
                   onChange={(e) => setNewCatName(e.target.value)}
-                  placeholder="e.g. Distributed Systems"
+                  placeholder="e.g. Distributed Systems, Rust, Flutter"
                   maxLength={60}
                   className="flex-1 rounded-sm border border-border-default bg-surface-0 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
                 />
@@ -159,19 +185,55 @@ export default function CreateBookModal({
                 </Button>
               </div>
             ) : (
-              <select
-                value={categoryId}
-                onChange={(e) =>
-                  setCategoryId(e.target.value ? Number(e.target.value) : "")
-                }
-                className="w-full rounded-sm border border-border-default bg-surface-0 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
-              >
-                {activeCategories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+              <div className="space-y-2">
+                <select
+                  value={categoryId}
+                  onChange={(e) =>
+                    setCategoryId(e.target.value ? Number(e.target.value) : "")
+                  }
+                  className="w-full rounded-sm border border-border-default bg-surface-0 px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
+                >
+                  {activeCategories.length > 0 && (
+                    <optgroup label="Your Desk">
+                      {activeCategories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {extraSuggested.length > 0 && (
+                    <optgroup label="Suggested Topics">
+                      {extraSuggested.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+
+                {/* Quick-pick suggestion chips when user desk has no categories yet */}
+                {activeCategories.length === 0 && extraSuggested.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {extraSuggested.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setCategoryId(cat.id)}
+                        className={cn(
+                          "rounded-sm border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                          Number(categoryId) === cat.id
+                            ? "border-accent bg-accent-light text-accent"
+                            : "border-border-default bg-surface-1 text-text-secondary hover:border-border-strong hover:text-text-primary",
+                        )}
+                      >
+                        {cat.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

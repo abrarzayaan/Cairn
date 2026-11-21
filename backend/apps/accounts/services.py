@@ -8,7 +8,7 @@ from django.db import transaction
 from apps.accounts.models import User
 from apps.moderation.models import Report
 from apps.moderation.services import invalidate_user_sessions
-from apps.notes.models import Book, Category, Note
+from apps.notes.models import Book, Note, UserCategory
 
 
 def update_user_bio(user: User, bio: str) -> User:
@@ -90,8 +90,8 @@ def delete_user_account(user: User, confirm_username: str) -> None:
     # Delete notes (cascades revisions, outgoing links, tags, slug history)
     Note.objects.filter(author=user).delete()
 
-    # Delete books before categories because Book.category uses on_delete=PROTECT
+    # Delete books and personal desk shelves (canonical categories remain shared)
     Book.objects.filter(author=user).delete()
-    Category.objects.filter(author=user).delete()
+    UserCategory.objects.filter(user=user).delete()
 
     user.delete()

@@ -16,7 +16,7 @@ from apps.moderation.services import (
     unhide_book,
     unhide_note,
 )
-from apps.notes.models import Book, Category, Note, NoteRevision, Tag
+from apps.notes.models import Book, Category, Note, NoteRevision, Tag, UserCategory
 
 
 class CairnAdminSite(OTPAdminSite):
@@ -240,17 +240,35 @@ class TagAdmin(admin.ModelAdmin):
 
 
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug", "author", "books_count", "created_at")
-    list_filter = ("author", "created_at")
-    search_fields = ("name", "slug", "author__username")
+    list_display = ("name", "slug", "is_default", "books_count", "shelves_count", "created_at")
+    list_filter = ("is_default", "created_at")
+    search_fields = ("name", "slug")
     readonly_fields = ("created_at",)
 
     def get_queryset(self, request):
-        return super().get_queryset(request).annotate(_books_count=Count("books"))
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(
+                _books_count=Count("books", distinct=True),
+                _shelves_count=Count("user_shelves", distinct=True),
+            )
+        )
 
     @admin.display(ordering="_books_count", description="Books")
     def books_count(self, obj):
         return obj._books_count
+
+    @admin.display(ordering="_shelves_count", description="User Desks")
+    def shelves_count(self, obj):
+        return obj._shelves_count
+
+
+class UserCategoryAdmin(admin.ModelAdmin):
+    list_display = ("user", "category", "sort_order", "created_at")
+    list_filter = ("created_at",)
+    search_fields = ("user__username", "category__name", "category__slug")
+    readonly_fields = ("created_at",)
 
 
 class BookAdmin(admin.ModelAdmin):
@@ -325,6 +343,7 @@ class NoteRevisionAdmin(admin.ModelAdmin):
 
 cairn_admin_site.register(User, UserAdmin)
 cairn_admin_site.register(Category, CategoryAdmin)
+cairn_admin_site.register(UserCategory, UserCategoryAdmin)
 cairn_admin_site.register(Book, BookAdmin)
 cairn_admin_site.register(Note, NoteAdmin)
 cairn_admin_site.register(Report, ReportAdmin)

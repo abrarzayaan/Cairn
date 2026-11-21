@@ -223,6 +223,15 @@ export async function fetchCategories(username?: string): Promise<Category[]> {
   return await res.json();
 }
 
+export async function fetchSuggestedCategories(): Promise<Category[]> {
+  const res = await fetch("/api/v1/categories/suggested", {
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!res.ok) return [];
+  return await res.json();
+}
+
 export async function createCategory(payload: {
   name: string;
   description?: string;
