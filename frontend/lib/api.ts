@@ -47,6 +47,34 @@ export async function logoutUser(): Promise<void> {
   });
 }
 
+export async function exportMyNotesZip(): Promise<Blob> {
+  const res = await fetch("/api/v1/auth/export", {
+    method: "GET",
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error(await extractErrorMessage(res, "Could not export notes"));
+  }
+  return await res.blob();
+}
+
+export async function deleteMyAccount(confirmUsername: string): Promise<void> {
+  const csrf = await ensureCsrfToken();
+  const res = await fetch("/api/v1/auth/delete-account", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": csrf,
+    },
+    credentials: "include",
+    body: JSON.stringify({ confirm_username: confirmUsername }),
+  });
+  if (!res.ok) {
+    throw new Error(await extractErrorMessage(res, "Could not delete account"));
+  }
+}
+
 function readCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));

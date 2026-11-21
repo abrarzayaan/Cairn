@@ -2,7 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, FileText, FolderKanban, User as UserIcon } from "lucide-react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import {
+  BookOpen,
+  FileText,
+  FolderKanban,
+  Search,
+  User as UserIcon,
+} from "lucide-react";
+import { motion } from "motion/react";
+import { Badge } from "@/components/ui/Badge";
 import {
   BookSummary,
   Category,
@@ -32,7 +41,9 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
   return (
     <>
       {text.slice(0, idx)}
-      <mark className="bg-accent-bg text-text">{text.slice(idx, idx + q.length)}</mark>
+      <mark className="rounded-[2px] bg-accent-light px-0.5 text-accent">
+        {text.slice(idx, idx + q.length)}
+      </mark>
       {text.slice(idx + q.length)}
     </>
   );
@@ -56,7 +67,7 @@ export default function SearchPalette({
 
   useEffect(() => {
     if (open) {
-      setTimeout(() => inputRef.current?.focus(), 10);
+      setTimeout(() => inputRef.current?.focus(), 20);
     } else {
       setQuery("");
       setBooks([]);
@@ -106,222 +117,283 @@ export default function SearchPalette({
         kind: "book",
         href: `/u/${b.author_username}/books/${b.slug}`,
         item: b,
-      })
+      }),
     );
     results.forEach((n) =>
       out.push({
         kind: "note",
         href: `/u/${n.author_username}/${n.slug}`,
         item: n,
-      })
+      }),
     );
     categories.forEach((c) =>
       out.push({
         kind: "category",
         href: `/search?type=books&category=${encodeURIComponent(c.slug)}`,
         item: c,
-      })
+      }),
     );
     users.forEach((u) =>
       out.push({
         kind: "user",
         href: `/u/${u.username}`,
         item: u,
-      })
+      }),
     );
     return out;
   }, [books, results, categories, users]);
 
-  if (!open) return null;
-
-  const navigateTo = (href: string) => {
+  const openEntry = (entry: PaletteEntry) => {
     onClose();
-    router.push(href);
+    router.push(entry.href);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
       e.preventDefault();
-      onClose();
-    } else if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActiveIndex((prev) => (entries.length ? (prev + 1) % entries.length : 0));
+      if (entries.length > 0) {
+        setActiveIndex((prev) => (prev + 1) % entries.length);
+      }
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex((prev) =>
-        entries.length ? (prev - 1 + entries.length) % entries.length : 0
-      );
+      if (entries.length > 0) {
+        setActiveIndex((prev) => (prev - 1 + entries.length) % entries.length);
+      }
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (entries[activeIndex]) {
-        navigateTo(entries[activeIndex].href);
-      } else if (query.trim()) {
-        navigateTo(`/search?q=${encodeURIComponent(query.trim())}`);
+        openEntry(entries[activeIndex]);
+      } else {
+        onClose();
+        router.push(`/search?q=${encodeURIComponent(query.trim())}`);
       }
     }
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 px-4 pt-16 backdrop-blur-[1px]"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Search Cairn Docs"
-      onClick={onClose}
+    <DialogPrimitive.Root
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
     >
-      <div
-        className="w-full max-w-2xl overflow-hidden rounded-md border border-border-strong bg-bg shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleKeyDown}
-      >
-        <div className="flex items-center border-b border-border px-4 py-3">
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search published books, chapters, topics, or @developer..."
-            className="w-full bg-transparent font-mono text-sm text-text placeholder:text-text-muted focus:outline-none"
-          />
-          <kbd className="ml-2 rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
-            ESC
-          </kbd>
-        </div>
-
-        <div className="max-h-[420px] overflow-y-auto">
-          {loading ? (
-            <div className="px-4 py-6 text-center font-mono text-xs text-text-muted">
-              Searching documentation...
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px]" />
+        <DialogPrimitive.Content
+          aria-label="Search docs, books, and developers"
+          className="fixed left-1/2 top-[12vh] z-50 w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 focus:outline-none"
+        >
+          <DialogPrimitive.Title className="sr-only">
+            Search Cairn
+          </DialogPrimitive.Title>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97, y: -6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.14, ease: "easeOut" }}
+            className="overflow-hidden rounded-lg border border-border-default bg-surface-0 shadow-2xl"
+          >
+            {/* Search Input */}
+            <div className="flex items-center gap-2.5 border-b border-border-subtle px-4 py-3">
+              <Search className="h-4 w-4 shrink-0 text-text-tertiary" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Search books, chapters, topics, or @developers..."
+                className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-disabled focus:outline-none"
+                aria-label="Search query"
+              />
+              {loading && (
+                <span className="shrink-0 text-xs text-text-tertiary">
+                  Searching...
+                </span>
+              )}
             </div>
-          ) : entries.length === 0 ? (
-            <div className="px-4 py-6 text-center font-mono text-xs text-text-muted">
-              {query.trim()
-                ? `No matching docs for "${query}".`
-                : "Type to search books, chapters, categories, or developers."}
+
+            {/* Results List */}
+            <div
+              role="listbox"
+              className="max-h-[380px] overflow-y-auto p-1.5"
+            >
+              {entries.length === 0 && !loading ? (
+                <div className="px-3 py-8 text-center text-xs text-text-tertiary">
+                  {query.trim()
+                    ? `No results for "${query.trim()}". Press Enter for full search.`
+                    : "Start typing to search published books, notes, and developer profiles."}
+                </div>
+              ) : (
+                <ul className="space-y-0.5">
+                  {entries.map((entry, idx) => {
+                    const isActive = idx === activeIndex;
+                    return (
+                      <li
+                        key={`${entry.kind}-${entry.href}`}
+                        role="option"
+                        aria-selected={isActive}
+                      >
+                        <button
+                          type="button"
+                          onMouseEnter={() => setActiveIndex(idx)}
+                          onClick={() => openEntry(entry)}
+                          className={`flex w-full items-center justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm transition-colors ${
+                            isActive
+                              ? "bg-surface-2 text-text-primary"
+                              : "text-text-secondary hover:bg-surface-1"
+                          }`}
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                            {entry.kind === "book" && (
+                              <BookOpen className="h-4 w-4 shrink-0 text-accent" />
+                            )}
+                            {entry.kind === "note" && (
+                              <FileText className="h-4 w-4 shrink-0 text-text-tertiary" />
+                            )}
+                            {entry.kind === "category" && (
+                              <FolderKanban className="h-4 w-4 shrink-0 text-accent" />
+                            )}
+                            {entry.kind === "user" && (
+                              <UserIcon className="h-4 w-4 shrink-0 text-accent" />
+                            )}
+
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-medium text-text-primary">
+                                {entry.kind === "book" && (
+                                  <HighlightMatch
+                                    text={entry.item.title}
+                                    query={query}
+                                  />
+                                )}
+                                {entry.kind === "note" && (
+                                  <HighlightMatch
+                                    text={entry.item.title}
+                                    query={query}
+                                  />
+                                )}
+                                {entry.kind === "category" && (
+                                  <HighlightMatch
+                                    text={entry.item.name}
+                                    query={query}
+                                  />
+                                )}
+                                {entry.kind === "user" && (
+                                  <>
+                                    @
+                                    <HighlightMatch
+                                      text={entry.item.username}
+                                      query={query}
+                                    />
+                                  </>
+                                )}
+                              </div>
+
+                              <div className="truncate text-xs text-text-tertiary">
+                                {entry.kind === "book" && (
+                                  <>
+                                    {entry.item.category.name} &middot;{" "}
+                                    {entry.item.chapter_count} chs &middot; @
+                                    {entry.item.author_username ===
+                                    currentUsername
+                                      ? "you"
+                                      : entry.item.author_username}
+                                  </>
+                                )}
+                                {entry.kind === "note" && (
+                                  <>
+                                    {entry.item.book_title
+                                      ? `${entry.item.book_title} · `
+                                      : ""}
+                                    @
+                                    {entry.item.author_username ===
+                                    currentUsername
+                                      ? "you"
+                                      : entry.item.author_username}
+                                  </>
+                                )}
+                                {entry.kind === "category" && (
+                                  <>{entry.item.book_count} books</>
+                                )}
+                                {entry.kind === "user" && (
+                                  <>
+                                    {entry.item.published_book_count} published
+                                    books &middot;{" "}
+                                    {entry.item.published_note_count} notes
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {entry.kind === "book" && (
+                              <Badge variant="info" size="sm">
+                                Book
+                              </Badge>
+                            )}
+                            {entry.kind === "note" &&
+                              entry.item.visibility === "private" && (
+                                <Badge variant="warning" size="sm">
+                                  Private
+                                </Badge>
+                              )}
+                            {entry.kind === "note" &&
+                              entry.item.visibility === "public" &&
+                              entry.item.tags[0] && (
+                                <span className="font-mono text-[11px] text-text-tertiary">
+                                  #{entry.item.tags[0]}
+                                </span>
+                              )}
+                            {entry.kind === "user" && (
+                              <Badge variant="outline" size="sm">
+                                Dev
+                              </Badge>
+                            )}
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
-          ) : (
-            <ul className="divide-y divide-border">
-              {entries.map((entry, idx) => {
-                const isSelected = idx === activeIndex;
-                return (
-                  <li key={`${entry.kind}-${idx}-${entry.href}`}>
-                    <button
-                      type="button"
-                      onClick={() => navigateTo(entry.href)}
-                      onMouseEnter={() => setActiveIndex(idx)}
-                      className={`flex w-full items-start justify-between gap-3 px-4 py-2.5 text-left transition-colors ${
-                        isSelected ? "bg-bg-subtle" : "bg-bg"
-                      }`}
-                    >
-                      <div className="flex min-w-0 items-start gap-2.5">
-                        <span className="mt-0.5 shrink-0 text-accent">
-                          {entry.kind === "book" && <BookOpen className="h-4 w-4" />}
-                          {entry.kind === "note" && <FileText className="h-4 w-4" />}
-                          {entry.kind === "category" && (
-                            <FolderKanban className="h-4 w-4" />
-                          )}
-                          {entry.kind === "user" && <UserIcon className="h-4 w-4" />}
-                        </span>
-                        <div className="min-w-0">
-                          {entry.kind === "book" && (
-                            <>
-                              <div className="truncate font-sans text-sm font-medium text-text">
-                                <HighlightMatch text={entry.item.title} query={query} />
-                              </div>
-                              <div className="font-mono text-[11px] text-text-muted">
-                                Book &middot; {entry.item.category.name} &middot;{" "}
-                                {entry.item.chapter_count} ch &middot; @
-                                {entry.item.author_username}
-                              </div>
-                            </>
-                          )}
-                          {entry.kind === "note" && (
-                            <>
-                              <div className="truncate font-sans text-sm font-medium text-text">
-                                <HighlightMatch text={entry.item.title} query={query} />
-                              </div>
-                              <div className="font-mono text-[11px] text-text-muted">
-                                {entry.item.book_title
-                                  ? `${entry.item.book_title} · Ch. ${String(
-                                      entry.item.sequence || 1
-                                    ).padStart(2, "0")}`
-                                  : "Note"}{" "}
-                                &middot; @{entry.item.author_username}
-                              </div>
-                            </>
-                          )}
-                          {entry.kind === "category" && (
-                            <>
-                              <div className="truncate font-sans text-sm font-medium text-text">
-                                <HighlightMatch text={entry.item.name} query={query} />
-                              </div>
-                              <div className="font-mono text-[11px] text-text-muted">
-                                Category &middot; {entry.item.book_count} books
-                              </div>
-                            </>
-                          )}
-                          {entry.kind === "user" && (
-                            <>
-                              <div className="truncate font-mono text-sm font-medium text-text">
-                                @<HighlightMatch text={entry.item.username} query={query} />
-                              </div>
-                              <div className="font-mono text-[11px] text-text-muted">
-                                Developer &middot; {entry.item.published_book_count ?? entry.item.public_book_count} published books &middot;{" "}
-                                {entry.item.published_note_count ?? entry.item.public_note_count} published docs
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
 
-                      <span className="shrink-0 rounded border border-border bg-bg-subtle px-1.5 py-0.5 font-mono text-[10px] uppercase text-text-muted">
-                        {entry.kind}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-bg-subtle px-4 py-2 font-mono text-[11px] text-text-muted">
-          <div className="flex items-center gap-3">
-            <span>
-              <kbd className="rounded border border-border bg-bg px-1">&uarr;&darr;</kbd>{" "}
-              move
-            </span>
-            <span>
-              <kbd className="rounded border border-border bg-bg px-1">Enter</kbd>{" "}
-              open
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            {currentUsername && (
+            {/* Footer Key Hints */}
+            <div className="flex items-center justify-between border-t border-border-subtle bg-surface-1 px-4 py-2 text-[11px] text-text-tertiary">
+              <div className="flex items-center gap-3">
+                <span>
+                  <kbd className="rounded border border-border-default bg-surface-0 px-1 py-0.5 font-mono text-[10px]">
+                    Enter
+                  </kbd>{" "}
+                  open
+                </span>
+                <span>
+                  <kbd className="rounded border border-border-default bg-surface-0 px-1 py-0.5 font-mono text-[10px]">
+                    &uarr;&darr;
+                  </kbd>{" "}
+                  move
+                </span>
+                <span>
+                  <kbd className="rounded border border-border-default bg-surface-0 px-1 py-0.5 font-mono text-[10px]">
+                    Esc
+                  </kbd>{" "}
+                  close
+                </span>
+              </div>
               <button
                 type="button"
-                onClick={() => navigateTo(`/search?scope=mine`)}
-                className="text-accent hover:underline"
+                onClick={() => {
+                  onClose();
+                  router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+                }}
+                className="font-medium text-accent hover:underline"
               >
-                My Docs
+                Full search &rarr;
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() =>
-                navigateTo(
-                  query.trim()
-                    ? `/search?q=${encodeURIComponent(query.trim())}`
-                    : "/search"
-                )
-              }
-              className="text-text hover:underline"
-            >
-              Advanced search &rarr;
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+            </div>
+          </motion.div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }

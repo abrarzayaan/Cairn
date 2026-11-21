@@ -580,3 +580,35 @@ def get_user_profile(viewer, username: str) -> dict | None:
             and viewer.id == profile_user.id
         ),
     }
+
+
+def get_sitemap_entries() -> dict:
+    """Return URL paths and timestamps for published, non-hidden notes and books."""
+    notes_qs = (
+        Note.objects.filter(published_notes_q())
+        .select_related("author")
+        .only("slug", "updated_at", "author__username")
+        .order_by("-updated_at", "-id")
+    )
+    books_qs = (
+        Book.objects.filter(published_books_q())
+        .select_related("author")
+        .only("slug", "updated_at", "author__username")
+        .order_by("-updated_at", "-id")
+    )
+
+    notes = [
+        {
+            "path": f"/u/{n.author.username}/{n.slug}",
+            "updated_at": n.updated_at,
+        }
+        for n in notes_qs
+    ]
+    books = [
+        {
+            "path": f"/u/{b.author.username}/books/{b.slug}",
+            "updated_at": b.updated_at,
+        }
+        for b in books_qs
+    ]
+    return {"notes": notes, "books": books}

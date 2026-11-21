@@ -122,13 +122,13 @@ Legend: **P** = priority (M must, S should, C could)
 
 ## M7. Profile, home, and SEO
 
-- [ ] T7.1 Profile page `/u/<username>/` with public notes, topic counts, bio, GitHub link (M)
-- [ ] T7.2 Home page per DESIGN.md (recent public notes + topics) (M)
-- [ ] T7.3 Meta tags, canonical URL, Open Graph (text only) for public notes (M)
-- [ ] T7.4 `sitemap.xml` and `robots.txt` (public + not hidden only) (S)
-- [ ] T7.5 404 and 500 pages (M)
-- [ ] T7.6 Export all notes as ZIP of `.md` (S)
-- [ ] T7.7 Account deletion with typed confirmation (M)
+- [x] T7.1 Profile page `/u/<username>/` with public notes, topic counts, bio, GitHub link (M)
+- [x] T7.2 Home page per DESIGN.md (recent public notes + topics) (M)
+- [x] T7.3 Meta tags, canonical URL, Open Graph (text only) for public notes (M)
+- [x] T7.4 `sitemap.xml` and `robots.txt` (public + not hidden only) (S)
+- [x] T7.5 404 and 500 pages (M)
+- [x] T7.6 Export all notes as ZIP of `.md` (S)
+- [x] T7.7 Account deletion with typed confirmation (M)
 
 **Done when:** you can send your profile link to a friend and they can read your public notes while signed out.
 

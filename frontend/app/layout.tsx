@@ -37,10 +37,25 @@ const notoBengali = Noto_Sans_Bengali({
   display: "swap",
 });
 
+const siteUrl = (
+  process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+).replace(/\/+$/, "");
+
 export const metadata: Metadata = {
-  title: "Cairn",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "Cairn",
+    template: "%s · Cairn",
+  },
   description:
     "Linked notes for developers. Write what you learn. Link what depends on what.",
+  openGraph: {
+    type: "website",
+    siteName: "Cairn",
+    title: "Cairn",
+    description:
+      "Linked notes for developers. Write what you learn. Link what depends on what.",
+  },
 };
 
 export default async function RootLayout({

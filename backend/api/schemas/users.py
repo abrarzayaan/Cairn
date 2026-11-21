@@ -14,3 +14,7 @@ class AuthStatus(BaseModel):
 
 class UpdateBioIn(BaseModel):
     bio: str = Field(..., max_length=280)
+
+
+class DeleteAccountIn(BaseModel):
+    confirm_username: str = Field(..., min_length=1, max_length=64)

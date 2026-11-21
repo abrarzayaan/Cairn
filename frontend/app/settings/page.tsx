@@ -1,13 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchMe, updateBio, User } from "@/lib/api";
+import {
+  deleteMyAccount,
+  exportMyNotesZip,
+  fetchMe,
+  updateBio,
+  User,
+} from "@/lib/api";
 
 export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null);
   const [bio, setBio] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [confirmUsername, setConfirmUsername] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -33,10 +43,56 @@ export default function SettingsPage() {
       const updated = await updateBio(bio);
       setUser(updated);
       setStatusMessage("Saved");
-    } catch (err: any) {
-      setErrorMessage(err.message || "Could not save bio.");
+    } catch (err: unknown) {
+      setErrorMessage(
+        err instanceof Error ? err.message : "Could not save bio."
+      );
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleExportZip = async () => {
+    if (!user || exporting) return;
+    setExporting(true);
+    setStatusMessage(null);
+    setErrorMessage(null);
+
+    try {
+      const blob = await exportMyNotesZip();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `cairn-${user.username}-export.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setStatusMessage("Export downloaded");
+    } catch (err: unknown) {
+      setErrorMessage(
+        err instanceof Error ? err.message : "Could not export notes."
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleDeleteAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || deleting || confirmUsername.trim() !== user.username) return;
+    setDeleting(true);
+    setStatusMessage(null);
+    setErrorMessage(null);
+
+    try {
+      await deleteMyAccount(confirmUsername.trim());
+      window.location.href = "/";
+    } catch (err: unknown) {
+      setErrorMessage(
+        err instanceof Error ? err.message : "Could not delete account."
+      );
+      setDeleting(false);
     }
   };
 
@@ -47,6 +103,8 @@ export default function SettingsPage() {
   }
 
   if (!user) return null;
+
+  const canConfirmDelete = confirmUsername.trim() === user.username;
 
   return (
     <div className="mx-auto max-w-[600px] py-4">
@@ -118,15 +176,16 @@ export default function SettingsPage() {
       <section className="mb-8 border-b border-border pb-8">
         <h2 className="mb-2 text-lg font-medium text-text">Export data</h2>
         <p className="mb-3 text-sm text-text-muted">
-          Export all your notes and revisions as a ZIP file containing Markdown
-          files.
+          Download a ZIP archive of all your notes (private, public, and
+          published) as Markdown files with front matter.
         </p>
         <button
           type="button"
-          disabled
-          className="inline-flex h-8 items-center justify-center rounded border border-border-strong bg-bg px-3 text-sm font-medium text-text opacity-50"
+          onClick={handleExportZip}
+          disabled={exporting}
+          className="inline-flex h-8 items-center justify-center rounded border border-border-strong bg-bg px-3 text-sm font-medium text-text transition-colors hover:bg-bg-subtle disabled:opacity-50"
         >
-          Export ZIP (Available in M7)
+          {exporting ? "Preparing ZIP..." : "Export ZIP"}
         </button>
       </section>
 
@@ -134,16 +193,61 @@ export default function SettingsPage() {
       <section>
         <h2 className="mb-2 text-lg font-medium text-danger">Delete account</h2>
         <p className="mb-3 text-sm text-text-muted">
-          Permanently deletes your account, your notes, revisions, and data.
-          This action cannot be undone.
+          Permanently deletes your account, books, categories, notes, revisions,
+          links, and reports you filed. This action cannot be undone.
         </p>
-        <button
-          type="button"
-          disabled
-          className="inline-flex h-8 items-center justify-center rounded border border-danger bg-transparent px-3 text-sm font-medium text-danger opacity-50"
-        >
-          Delete account
-        </button>
+
+        {!showDeleteConfirm ? (
+          <button
+            type="button"
+            onClick={() => setShowDeleteConfirm(true)}
+            className="inline-flex h-8 items-center justify-center rounded border border-danger bg-transparent px-3 text-sm font-medium text-danger transition-colors hover:bg-danger hover:text-bg"
+          >
+            Delete account
+          </button>
+        ) : (
+          <form
+            onSubmit={handleDeleteAccount}
+            className="mt-4 space-y-3 rounded border border-danger/50 bg-bg-subtle p-4"
+          >
+            <label
+              htmlFor="confirm-username-input"
+              className="block text-sm text-text"
+            >
+              Type <span className="font-mono font-semibold">{user.username}</span>{" "}
+              to confirm permanent deletion:
+            </label>
+            <input
+              id="confirm-username-input"
+              type="text"
+              autoComplete="off"
+              value={confirmUsername}
+              onChange={(e) => setConfirmUsername(e.target.value)}
+              placeholder={user.username}
+              className="h-8 w-full rounded border border-border-strong bg-bg px-2.5 font-mono text-sm text-text focus:outline-accent"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={!canConfirmDelete || deleting}
+                className="inline-flex h-8 items-center justify-center rounded border border-danger bg-danger px-3 text-sm font-medium text-bg transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {deleting ? "Deleting..." : "Permanently delete account"}
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setConfirmUsername("");
+                }}
+                className="inline-flex h-8 items-center justify-center rounded border border-border-strong bg-bg px-3 text-sm font-medium text-text hover:bg-bg-subtle"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
       </section>
     </div>
   );

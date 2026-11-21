@@ -1,15 +1,16 @@
 from datetime import datetime
 
 from django.contrib.sessions.backends.db import SessionStore
+from django.core.exceptions import ValidationError
 from django.middleware.csrf import _get_new_csrf_string, _mask_cipher_secret
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 
-from api.deps import get_current_user, require_user
+from api.deps import get_current_user, require_user, verify_csrf
 from api.schemas.notes import BookSummaryOut, CategoryOut
-from api.schemas.users import AuthStatus, UpdateBioIn, UserOut
+from api.schemas.users import AuthStatus, DeleteAccountIn, UpdateBioIn, UserOut
 from apps.accounts.models import User
-from apps.accounts.services import update_user_bio
+from apps.accounts.services import delete_user_account, export_user_notes_zip, update_user_bio
 from apps.search.services import get_user_profile
 
 router = APIRouter(tags=["auth"])
@@ -79,6 +80,49 @@ def set_bio(data: UpdateBioIn, user: User = Depends(require_user)):
 
 @router.post("/auth/logout")
 def logout(response: Response, sessionid: str | None = Cookie(None)):
+    if sessionid:
+        session = SessionStore(session_key=sessionid)
+        session.flush()
+    response.delete_cookie("sessionid")
+    return {"ok": True}
+
+
+@router.get("/auth/export")
+def export_notes(user: User = Depends(require_user)):
+    """Export all of the authenticated user's notes as a Markdown ZIP archive."""
+    zip_bytes = export_user_notes_zip(user)
+    filename = f"cairn-{user.username}-export.zip"
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
+@router.post("/auth/delete-account", dependencies=[Depends(verify_csrf)])
+def delete_account(
+    data: DeleteAccountIn,
+    response: Response,
+    user: User = Depends(require_user),
+    sessionid: str | None = Cookie(None),
+):
+    """Permanently delete the authenticated user's account after username confirmation."""
+    try:
+        delete_user_account(user, data.confirm_username)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "confirmation_mismatch",
+                    "message": exc.messages[0] if exc.messages else str(exc),
+                }
+            },
+        ) from None
+
     if sessionid:
         session = SessionStore(session_key=sessionid)
         session.flush()

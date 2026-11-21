@@ -7,7 +7,7 @@ from api.deps import get_current_user
 from api.rate_limit import search_rate_limiter
 from api.schemas.notes import BookSummaryOut, CategoryOut
 from apps.accounts.models import User
-from apps.search.services import get_home_feed, search_notes
+from apps.search.services import get_home_feed, get_sitemap_entries, search_notes
 
 router = APIRouter(tags=["search"])
 
@@ -72,6 +72,22 @@ class SearchResponseOut(BaseModel):
     books: list[BookSummaryOut] = []
     categories: list[CategoryOut] = []
     users: list[UserSearchHitOut] = []
+
+
+class SitemapEntryOut(BaseModel):
+    path: str
+    updated_at: datetime
+
+
+class SitemapOut(BaseModel):
+    notes: list[SitemapEntryOut] = []
+    books: list[SitemapEntryOut] = []
+
+
+@router.get("/seo/sitemap", response_model=SitemapOut)
+def sitemap_entries_endpoint():
+    """Return published, non-hidden notes and books for sitemap.xml generation."""
+    return get_sitemap_entries()
 
 
 @router.get("/home", response_model=HomeFeedOut)

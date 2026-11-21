@@ -3,8 +3,12 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FolderKanban, User as UserIcon } from "lucide-react";
+import * as Avatar from "@radix-ui/react-avatar";
+import { FolderKanban, Search } from "lucide-react";
 import BookCard from "@/components/BookCard";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import {
   BookSummary,
   Category,
@@ -27,13 +31,16 @@ function SearchPageInner() {
   const initialTag = searchParams.get("tag") || "";
   const initialAuthor = searchParams.get("author") || "";
   const initialScope = searchParams.get("scope") === "mine" ? "mine" : "all";
-  const initialOffset = Math.max(0, Number(searchParams.get("offset") || "0") || 0);
+  const initialOffset = Math.max(
+    0,
+    Number(searchParams.get("offset") || "0") || 0,
+  );
 
   const [q, setQ] = useState(initialQ);
   const [searchType, setSearchType] = useState<SearchType>(
     ["all", "books", "notes", "categories", "users"].includes(initialType)
       ? initialType
-      : "all"
+      : "all",
   );
   const [category, setCategory] = useState(initialCategory);
   const [tag, setTag] = useState(initialTag);
@@ -66,7 +73,7 @@ function SearchPageInner() {
     setSearchType(
       ["all", "books", "notes", "categories", "users"].includes(nextType)
         ? nextType
-        : "all"
+        : "all",
     );
     setCategory(searchParams.get("category") || "");
     setTag(searchParams.get("tag") || "");
@@ -120,356 +127,436 @@ function SearchPageInner() {
     initialOffset,
   ]);
 
-  const applyFilters = (nextOffset = 0, overrideType?: SearchType) => {
-    const t = overrideType ?? searchType;
+  const applyFilters = (next: {
+    q?: string;
+    type?: SearchType;
+    category?: string;
+    tag?: string;
+    author?: string;
+    scope?: "all" | "mine";
+    offset?: number;
+  }) => {
     const sp = new URLSearchParams();
-    if (q.trim()) sp.set("q", q.trim());
-    if (t !== "all") sp.set("type", t);
-    if (category.trim()) sp.set("category", category.trim());
-    if (tag.trim()) sp.set("tag", tag.trim().replace(/^#/, ""));
-    if (author.trim()) sp.set("author", author.trim().replace(/^@/, ""));
-    if (scope === "mine") sp.set("scope", "mine");
-    if (nextOffset > 0) sp.set("offset", String(nextOffset));
-    router.push(`/search?${sp.toString()}`);
+    const nq = (next.q ?? q).trim();
+    const nt = next.type ?? searchType;
+    const nc = (next.category ?? category).trim();
+    const ntag = (next.tag ?? tag).trim().replace(/^#/, "");
+    const na = (next.author ?? author).trim().replace(/^@/, "");
+    const ns = next.scope ?? scope;
+    const no = next.offset ?? 0;
+
+    if (nq) sp.set("q", nq);
+    if (nt !== "all") sp.set("type", nt);
+    if (nc) sp.set("category", nc);
+    if (ntag) sp.set("tag", ntag);
+    if (na) sp.set("author", na);
+    if (ns === "mine") sp.set("scope", "mine");
+    if (no > 0) sp.set("offset", String(no));
+
+    router.push(`/search${sp.toString() ? `?${sp.toString()}` : ""}`);
   };
 
-  const hasAnyHit =
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    applyFilters({ offset: 0 });
+  };
+
+  const hasAny =
     books.length > 0 ||
     results.length > 0 ||
     categories.length > 0 ||
     users.length > 0;
 
   return (
-    <div className="mx-auto max-w-[1040px] space-y-6 py-4">
-      <div>
-        <p className="font-mono text-xs uppercase tracking-wider text-accent">
-          Unified Documentation Search
-        </p>
-        <h1 className="mt-1 font-sans text-2xl font-semibold tracking-tight text-text">
-          Search Books, Chapters, Categories &amp; Developers
-        </h1>
-      </div>
-
+    <div className="mx-auto max-w-6xl space-y-6">
+      {/* TOP SEARCH BAR */}
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          applyFilters(0);
-        }}
-        className="space-y-3 rounded-md border border-border bg-bg-subtle p-4"
+        onSubmit={handleSubmit}
+        className="flex flex-col gap-3 sm:flex-row sm:items-center"
       >
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
           <input
             type="text"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search books, chapters, topics, or @username..."
-            className="flex-1 rounded border border-border-strong bg-bg px-3 py-2 font-mono text-sm text-text focus:border-accent focus:outline-none"
+            placeholder="Search published books, chapters, topics, or @developers..."
+            className="h-10 w-full rounded-md border border-border-default bg-surface-0 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-disabled focus:border-accent focus:outline-none"
           />
-          <button
-            type="submit"
-            className="rounded bg-text px-5 py-2 font-mono text-xs font-medium text-bg hover:bg-accent"
-          >
-            Search
-          </button>
         </div>
+        <Button type="submit" size="lg" variant="primary">
+          Search
+        </Button>
+      </form>
 
-        {/* TYPE PILLS */}
-        <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
-          {(
-            (scope === "mine" || author.trim()
-              ? [
-                  ["all", "All"],
-                  ["books", "Books"],
-                  ["notes", "Chapters & Notes"],
-                  ["categories", "Desk Categories"],
-                  ["users", "Developers"],
-                ]
-              : [
-                  ["all", "All"],
-                  ["books", "Books"],
-                  ["notes", "Chapters & Notes"],
-                  ["users", "Developers"],
-                ]) as [SearchType, string][]
-          ).map(([val, label]) => (
-            <button
-              key={val}
-              type="button"
-              onClick={() => {
-                setSearchType(val);
-                applyFilters(0, val);
-              }}
-              className={`rounded border px-2.5 py-1 transition-colors ${
-                searchType === val
-                  ? "border-accent bg-accent text-bg font-medium"
-                  : "border-border bg-bg text-text-muted hover:text-text"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* SECONDARY FILTERS */}
-        <div className="grid grid-cols-1 gap-2.5 pt-1 font-mono text-xs sm:grid-cols-4">
-          {scope === "mine" || author.trim() ? (
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              aria-label="Filter by category"
-              className="rounded border border-border bg-bg px-2.5 py-1.5 text-text focus:border-accent focus:outline-none"
-            >
-              <option value="">
-                {scope === "mine"
-                  ? "All My Categories"
-                  : `@${author.trim().replace(/^@/, "")}'s Categories`}
-              </option>
-              {allCategories.map((c) => (
-                <option key={c.id} value={c.slug}>
-                  {c.name} ({c.book_count})
-                </option>
+      {/* TWO-COLUMN: LEFT FILTER SIDEBAR | RIGHT RESULTS */}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
+        <aside className="space-y-6 rounded-md bg-surface-1 p-4 lg:sticky lg:top-16">
+          {/* Scope */}
+          <div className="space-y-2">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+              Scope
+            </h2>
+            <div className="grid grid-cols-2 gap-1.5">
+              {(
+                [
+                  { key: "all", label: "Published" },
+                  { key: "mine", label: "My Desk" },
+                ] as const
+              ).map((s) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => applyFilters({ scope: s.key, offset: 0 })}
+                  className={`rounded-sm px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    scope === s.key
+                      ? "bg-accent text-white"
+                      : "bg-surface-0 text-text-secondary hover:bg-surface-2"
+                  }`}
+                >
+                  {s.label}
+                </button>
               ))}
-            </select>
-          ) : (
-            <div className="flex items-center rounded border border-border/60 bg-bg px-2.5 py-1.5 text-text-muted/70">
-              <span className="truncate">Desk category (set @dev or My Docs)</span>
+            </div>
+          </div>
+
+          {/* Type */}
+          <div className="space-y-1.5 border-t border-border-subtle pt-4">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+              Type
+            </h2>
+            {(
+              [
+                { key: "all", label: "All results" },
+                { key: "books", label: "Books" },
+                { key: "notes", label: "Chapters & Notes" },
+                { key: "users", label: "Developers" },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => applyFilters({ type: t.key, offset: 0 })}
+                className={`flex w-full items-center rounded-sm px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
+                  searchType === t.key
+                    ? "bg-surface-2 text-text-primary"
+                    : "text-text-secondary hover:bg-surface-2/60 hover:text-text-primary"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tag & Author Filters */}
+          <div className="space-y-3 border-t border-border-subtle pt-4">
+            <div>
+              <label
+                htmlFor="filter-tag"
+                className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-text-tertiary"
+              >
+                Tag
+              </label>
+              <input
+                id="filter-tag"
+                type="text"
+                value={tag}
+                onChange={(e) => setTag(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") applyFilters({ offset: 0 });
+                }}
+                placeholder="e.g. javascript"
+                className="h-8 w-full rounded-sm border border-border-default bg-surface-0 px-2.5 text-xs text-text-primary focus:border-accent focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="filter-author"
+                className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-text-tertiary"
+              >
+                Author
+              </label>
+              <input
+                id="filter-author"
+                type="text"
+                value={author}
+                onChange={(e) => setAuthor(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") applyFilters({ offset: 0 });
+                }}
+                placeholder="e.g. rahim"
+                className="h-8 w-full rounded-sm border border-border-default bg-surface-0 px-2.5 text-xs text-text-primary focus:border-accent focus:outline-none"
+              />
+            </div>
+
+            {allCategories.length > 0 && (
+              <div>
+                <label
+                  htmlFor="filter-cat"
+                  className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-text-tertiary"
+                >
+                  Category
+                </label>
+                <select
+                  id="filter-cat"
+                  value={category}
+                  onChange={(e) =>
+                    applyFilters({ category: e.target.value, offset: 0 })
+                  }
+                  className="h-8 w-full rounded-sm border border-border-default bg-surface-0 px-2 text-xs text-text-primary focus:border-accent focus:outline-none"
+                >
+                  <option value="">All categories</option>
+                  {allCategories.map((c) => (
+                    <option key={c.id} value={c.slug}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="w-full"
+              onClick={() => applyFilters({ offset: 0 })}
+            >
+              Apply filters
+            </Button>
+          </div>
+        </aside>
+
+        {/* RIGHT RESULTS AREA */}
+        <div className="min-w-0 space-y-8">
+          {error && (
+            <div className="rounded-md border border-status-danger/30 bg-surface-1 p-4 text-xs text-status-danger">
+              {error}
             </div>
           )}
 
-          <input
-            type="text"
-            value={tag}
-            onChange={(e) => setTag(e.target.value)}
-            placeholder="#tag (e.g. sql)"
-            className="rounded border border-border bg-bg px-2.5 py-1.5 text-text focus:border-accent focus:outline-none"
-          />
-
-          <input
-            type="text"
-            value={author}
-            onChange={(e) => setAuthor(e.target.value)}
-            placeholder="@developer"
-            className="rounded border border-border bg-bg px-2.5 py-1.5 text-text focus:border-accent focus:outline-none"
-          />
-
-          <div className="flex rounded border border-border bg-bg p-0.5">
-            <button
-              type="button"
-              onClick={() => setScope("all")}
-              className={`flex-1 rounded py-1 ${
-                scope === "all" ? "bg-bg-inset font-semibold text-text" : "text-text-muted"
-              }`}
-            >
-              All Docs
-            </button>
-            <button
-              type="button"
-              onClick={() => setScope("mine")}
-              className={`flex-1 rounded py-1 ${
-                scope === "mine" ? "bg-bg-inset font-semibold text-text" : "text-text-muted"
-              }`}
-            >
-              My Docs
-            </button>
-          </div>
-        </div>
-      </form>
-
-      {error && (
-        <div className="rounded border border-danger/40 bg-bg-subtle p-3 font-mono text-xs text-danger">
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="py-10 font-mono text-xs text-text-muted">Searching...</div>
-      ) : !hasAnyHit ? (
-        <div className="rounded-md border border-dashed border-border p-8 text-center font-mono text-xs text-text-muted">
-          No matching books, chapters, categories, or developers found.
-        </div>
-      ) : (
-        <div className="space-y-8">
-          {/* DEVELOPERS */}
-          {users.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="border-b border-border pb-2 font-mono text-xs font-semibold uppercase tracking-wider text-text">
-                Developers ({users.length})
-              </h2>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {users.map((u) => (
-                  <Link
-                    key={u.username}
-                    href={`/u/${u.username}`}
-                    className="flex items-start gap-3 rounded-md border border-border bg-bg p-3.5 transition-colors hover:border-accent hover:no-underline"
-                  >
-                    <UserIcon className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-                    <div className="min-w-0">
-                      <div className="font-mono text-sm font-semibold text-text">
-                        @{u.username}
-                      </div>
-                      {u.bio && (
-                        <p className="mt-0.5 line-clamp-1 text-xs text-text-muted">
-                          {u.bio}
-                        </p>
-                      )}
-                      <div className="mt-1 font-mono text-[11px] text-text-muted">
-                        {u.published_book_count ?? u.public_book_count} published books &middot;{" "}
-                        {u.published_note_count ?? u.public_note_count} published docs
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* CATEGORIES */}
-          {categories.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="border-b border-border pb-2 font-mono text-xs font-semibold uppercase tracking-wider text-text">
-                Categories ({categories.length})
-              </h2>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {categories.map((cat) => (
-                  <Link
-                    key={cat.id}
-                    href={`/search?type=books&category=${encodeURIComponent(cat.slug)}`}
-                    className="flex items-start gap-3 rounded-md border border-border bg-bg p-3.5 transition-colors hover:border-accent hover:no-underline"
-                  >
-                    <FolderKanban className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-                    <div>
-                      <div className="font-sans text-sm font-semibold text-text">
-                        {cat.name}
-                      </div>
-                      {cat.description && (
-                        <p className="mt-0.5 line-clamp-1 text-xs text-text-muted">
-                          {cat.description}
-                        </p>
-                      )}
-                      <div className="mt-1 font-mono text-[11px] text-text-muted">
-                        {cat.book_count} public {cat.book_count === 1 ? "book" : "books"}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* DOCUMENTATION BOOKS */}
-          {books.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="border-b border-border pb-2 font-mono text-xs font-semibold uppercase tracking-wider text-text">
-                Documentation Books ({books.length})
-              </h2>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {books.map((book) => (
-                  <BookCard key={book.id} book={book} />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* CHAPTERS / NOTES */}
-          {results.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="border-b border-border pb-2 font-mono text-xs font-semibold uppercase tracking-wider text-text">
-                Chapters &amp; Notes ({total})
-              </h2>
-              <ul className="space-y-3">
-                {results.map((hit) => (
-                  <li
-                    key={hit.id}
-                    className="rounded-md border border-border bg-bg p-4 transition-colors hover:border-border-strong"
-                  >
-                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {hit.book_title && hit.book_slug && (
-                          <Link
-                            href={`/u/${hit.author_username}/books/${hit.book_slug}`}
-                            className="rounded border border-border bg-bg-subtle px-2 py-0.5 font-mono text-[11px] text-accent hover:underline"
-                          >
-                            {hit.book_title} · Ch.{" "}
-                            {String(hit.sequence || 1).padStart(2, "0")}
-                          </Link>
-                        )}
-                        <Link
-                          href={`/u/${hit.author_username}/${hit.slug}`}
-                          className="font-sans text-base font-semibold text-text hover:text-accent hover:no-underline"
-                        >
-                          {hit.title}
-                        </Link>
-                      </div>
-                      <span
-                        className={`rounded border px-1.5 py-0.5 font-mono text-[11px] ${
-                          hit.visibility === "private"
-                            ? "border-warn/40 bg-bg-subtle text-warn"
-                            : hit.is_published
-                            ? "border-ok/30 bg-bg-subtle text-ok"
-                            : "border-accent/30 bg-bg-subtle text-accent"
-                        }`}
-                      >
-                        {hit.visibility === "private"
-                          ? "private"
-                          : hit.is_published
-                          ? "published"
-                          : "public (desk)"}
-                      </span>
-                    </div>
-
-                    {hit.snippet && (
-                      <p className="mb-2 line-clamp-2 text-sm text-text-muted">
-                        {hit.snippet}
-                      </p>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-text-muted">
+          {loading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((n) => (
+                <div
+                  key={n}
+                  className="h-24 animate-pulse rounded-md bg-surface-1"
+                />
+              ))}
+            </div>
+          ) : !hasAny ? (
+            <Card variant="ghost" className="p-10 text-center">
+              <p className="text-sm font-medium text-text-primary">
+                {initialQ
+                  ? `Nothing matches "${initialQ}".`
+                  : "No matching results found."}
+              </p>
+              <p className="mt-1 text-xs text-text-tertiary">
+                Try fewer words or clear one of your filters.
+              </p>
+            </Card>
+          ) : (
+            <>
+              {/* DEVELOPER PROFILES */}
+              {users.length > 0 && (
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-text-primary">
+                    Developers ({users.length})
+                  </h2>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {users.map((u) => (
                       <Link
-                        href={`/u/${hit.author_username}`}
-                        className="hover:text-text hover:underline"
+                        key={u.username}
+                        href={`/u/${u.username}`}
+                        className="block hover:no-underline"
                       >
-                        @{hit.author_username}
+                        <Card variant="interactive" className="flex items-start gap-3.5 p-4">
+                          <Avatar.Root className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-light text-xs font-semibold text-accent">
+                            <Avatar.Fallback delayMs={0}>
+                              {u.username.slice(0, 2).toUpperCase()}
+                            </Avatar.Fallback>
+                          </Avatar.Root>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate text-sm font-semibold text-text-primary">
+                                @{u.username}
+                              </span>
+                              <Badge variant="success" size="sm">
+                                {u.published_book_count} books &middot;{" "}
+                                {u.published_note_count} notes
+                              </Badge>
+                            </div>
+                            {u.bio && (
+                              <p className="mt-1 line-clamp-2 text-xs text-text-secondary">
+                                {u.bio}
+                              </p>
+                            )}
+                          </div>
+                        </Card>
                       </Link>
-                      {hit.tags.map((t) => (
-                        <Link
-                          key={t}
-                          href={`/tags/${encodeURIComponent(t)}`}
-                          className="rounded border border-border bg-bg-subtle px-1.5 py-0.5 hover:border-accent hover:text-accent hover:no-underline"
-                        >
-                          #{t}
-                        </Link>
-                      ))}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-
-              {total > PAGE_SIZE && (
-                <div className="flex items-center justify-between border-t border-border pt-4 font-mono text-xs">
-                  <button
-                    type="button"
-                    disabled={offset === 0}
-                    onClick={() => applyFilters(Math.max(0, offset - PAGE_SIZE))}
-                    className="rounded border border-border-strong px-3 py-1 text-text disabled:opacity-40"
-                  >
-                    &larr; Previous
-                  </button>
-                  <span className="text-text-muted">
-                    Showing {offset + 1}&ndash;{Math.min(offset + PAGE_SIZE, total)} of {total}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={offset + PAGE_SIZE >= total}
-                    onClick={() => applyFilters(offset + PAGE_SIZE)}
-                    className="rounded border border-border-strong px-3 py-1 text-text disabled:opacity-40"
-                  >
-                    Next &rarr;
-                  </button>
-                </div>
+                    ))}
+                  </div>
+                </section>
               )}
-            </section>
+
+              {/* BOOKS */}
+              {books.length > 0 && (
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-text-primary">
+                    Books ({books.length})
+                  </h2>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {books.map((book) => (
+                      <BookCard key={book.id} book={book} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* CATEGORIES */}
+              {categories.length > 0 && (
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-text-primary">
+                    Categories ({categories.length})
+                  </h2>
+                  <div className="flex flex-wrap gap-2">
+                    {categories.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() =>
+                          applyFilters({ category: c.slug, offset: 0 })
+                        }
+                        className="inline-flex items-center gap-1.5 rounded-sm border border-border-default bg-surface-0 px-3 py-1.5 text-xs font-medium text-text-primary hover:border-border-strong hover:bg-surface-1"
+                      >
+                        <FolderKanban className="h-3.5 w-3.5 text-accent" />
+                        <span>{c.name}</span>
+                        <span className="text-text-tertiary">
+                          ({c.book_count})
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* NOTES */}
+              {results.length > 0 && (
+                <section className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-semibold text-text-primary">
+                      Chapters &amp; Notes ({total})
+                    </h2>
+                  </div>
+                  <ul className="space-y-2.5">
+                    {results.map((hit) => (
+                      <li key={hit.id}>
+                        <Card variant="interactive" className="p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Link
+                                href={`/u/${hit.author_username}/${hit.slug}`}
+                                className="text-base font-semibold text-text-primary hover:text-accent hover:no-underline"
+                              >
+                                {hit.title}
+                              </Link>
+                              {hit.book_title && hit.book_slug && (
+                                <Link
+                                  href={`/u/${hit.author_username}/books/${hit.book_slug}`}
+                                  className="rounded-sm bg-accent-light px-2 py-0.5 text-xs font-medium text-accent hover:no-underline"
+                                >
+                                  {hit.book_title}
+                                </Link>
+                              )}
+                            </div>
+                            <Badge
+                              variant={
+                                hit.visibility === "private"
+                                  ? "warning"
+                                  : hit.is_published
+                                  ? "success"
+                                  : "outline"
+                              }
+                              size="sm"
+                            >
+                              {hit.visibility === "private"
+                                ? "Private"
+                                : hit.is_published
+                                ? "Published"
+                                : "Desk"}
+                            </Badge>
+                          </div>
+
+                          {hit.snippet && (
+                            <p className="mt-1.5 line-clamp-2 text-sm text-text-secondary">
+                              {hit.snippet}
+                            </p>
+                          )}
+
+                          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-text-tertiary">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Link
+                                href={`/u/${hit.author_username}`}
+                                className="font-medium text-text-secondary hover:text-accent hover:no-underline"
+                              >
+                                @{hit.author_username}
+                              </Link>
+                              {hit.tags.map((t) => (
+                                <Link
+                                  key={t}
+                                  href={`/tags/${encodeURIComponent(t)}`}
+                                  className="rounded-sm bg-surface-1 px-1.5 py-0.5 font-mono text-[11px] hover:text-accent hover:no-underline"
+                                >
+                                  #{t}
+                                </Link>
+                              ))}
+                            </div>
+                          </div>
+                        </Card>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* PAGINATION */}
+                  {total > PAGE_SIZE && (
+                    <div className="flex items-center justify-between pt-4">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={offset === 0}
+                        onClick={() =>
+                          applyFilters({
+                            offset: Math.max(0, offset - PAGE_SIZE),
+                          })
+                        }
+                      >
+                        &larr; Previous
+                      </Button>
+                      <span className="text-xs text-text-tertiary">
+                        Showing {offset + 1}–{Math.min(offset + PAGE_SIZE, total)}{" "}
+                        of {total}
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={offset + PAGE_SIZE >= total}
+                        onClick={() =>
+                          applyFilters({ offset: offset + PAGE_SIZE })
+                        }
+                      >
+                        Next &rarr;
+                      </Button>
+                    </div>
+                  )}
+                </section>
+              )}
+            </>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -478,7 +565,7 @@ export default function SearchPage() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-[1040px] py-8 font-mono text-xs text-text-muted">
+        <div className="mx-auto max-w-6xl py-12 text-center text-sm text-text-tertiary">
           Loading search...
         </div>
       }

@@ -12,9 +12,60 @@ interface BookPageProps {
 
 export async function generateMetadata({ params }: BookPageProps): Promise<Metadata> {
   const { user, book } = await params;
-  return {
-    title: `${book} · @${user} · Cairn Docs`,
-  };
+  const backendUrl =
+    process.env.BACKEND_INTERNAL_URL ||
+    process.env.BACKEND_URL ||
+    "http://127.0.0.1:8000";
+
+  try {
+    // Fetch anonymously so private books never leak into meta tags
+    const res = await fetch(
+      `${backendUrl}/api/v1/books/by-slug/${encodeURIComponent(user)}/${encodeURIComponent(book)}`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) {
+      return {
+        title: "Cairn",
+        robots: { index: false, follow: false },
+      };
+    }
+    const data = await res.json();
+    const b = data.book;
+    if (!b || b.visibility !== "public" || b.moderation === "hidden") {
+      return {
+        title: "Cairn",
+        robots: { index: false, follow: false },
+      };
+    }
+
+    const title = `${b.title} — @${b.author_username}`;
+    const description =
+      b.description ||
+      `Documentation book "${b.title}" by @${b.author_username} on Cairn.`;
+    const canonicalPath = `/u/${b.author_username}/books/${b.slug}`;
+
+    return {
+      title,
+      description,
+      alternates: {
+        canonical: canonicalPath,
+      },
+      robots: b.is_published
+        ? { index: true, follow: true }
+        : { index: false, follow: false },
+      openGraph: {
+        type: "article",
+        siteName: "Cairn",
+        title,
+        description,
+        url: canonicalPath,
+      },
+    };
+  } catch {
+    return {
+      title: "Cairn",
+    };
+  }
 }
 
 export default async function BookContextPage({ params }: BookPageProps) {
