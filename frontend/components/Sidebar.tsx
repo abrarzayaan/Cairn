@@ -146,7 +146,7 @@ export default function Sidebar({
               onClick={() => isMobile && onMobileOpenChange(false)}
             />
             <NavItem
-              href="/search?type=note"
+              href="/search?type=notes"
               icon={Hash}
               label="Tags"
               active={pathname.startsWith("/tags")}

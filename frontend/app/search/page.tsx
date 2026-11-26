@@ -20,13 +20,26 @@ import {
 
 const PAGE_SIZE = 20;
 type SearchType = "all" | "books" | "notes" | "categories" | "users";
+const VALID_SEARCH_TYPES: readonly SearchType[] = [
+  "all",
+  "books",
+  "notes",
+  "categories",
+  "users",
+];
+
+function parseSearchType(value: string | null): SearchType {
+  return VALID_SEARCH_TYPES.includes(value as SearchType)
+    ? (value as SearchType)
+    : "all";
+}
 
 function SearchPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const initialQ = searchParams.get("q") || "";
-  const initialType = (searchParams.get("type") as SearchType) || "all";
+  const initialType = parseSearchType(searchParams.get("type"));
   const initialCategory = searchParams.get("category") || "";
   const initialTag = searchParams.get("tag") || "";
   const initialAuthor = searchParams.get("author") || "";
@@ -37,11 +50,7 @@ function SearchPageInner() {
   );
 
   const [q, setQ] = useState(initialQ);
-  const [searchType, setSearchType] = useState<SearchType>(
-    ["all", "books", "notes", "categories", "users"].includes(initialType)
-      ? initialType
-      : "all",
-  );
+  const [searchType, setSearchType] = useState<SearchType>(initialType);
   const [category, setCategory] = useState(initialCategory);
   const [tag, setTag] = useState(initialTag);
   const [author, setAuthor] = useState(initialAuthor);
@@ -68,13 +77,8 @@ function SearchPageInner() {
   }, [scope, author]);
 
   useEffect(() => {
-    const nextType = (searchParams.get("type") as SearchType) || "all";
     setQ(searchParams.get("q") || "");
-    setSearchType(
-      ["all", "books", "notes", "categories", "users"].includes(nextType)
-        ? nextType
-        : "all",
-    );
+    setSearchType(parseSearchType(searchParams.get("type")));
     setCategory(searchParams.get("category") || "");
     setTag(searchParams.get("tag") || "");
     setAuthor(searchParams.get("author") || "");
